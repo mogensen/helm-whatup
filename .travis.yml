@@ -15,7 +15,6 @@ cache:
   directories:
     - $HOME/.cache/go-build
     - $GOPATH/pkg/mod
-    - $HOME/.glide
     - $HOME/.minikube/cache
     - $HOME/.helm/cache
     - $HOME/docker
@@ -31,7 +30,7 @@ before_install:
   - if [[ -d $HOME/docker ]]; then ls $HOME/docker/*.tar.gz | xargs -I {file} sh -c "zcat {file} | docker load"; fi
 
 go:
-  - 1.12.x
+  - 1.13.x
 
 install: true
 
