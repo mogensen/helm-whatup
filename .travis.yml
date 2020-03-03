@@ -59,6 +59,8 @@ script:
   - export HELM_HOST=$(minikube service --url --format "{{.IP}}:{{.Port}}" --namespace=kube-system tiller-external | head -n1)
   - export TILLER_HOST=$(minikube service --url --format "{{.IP}}:{{.Port}}" --namespace=kube-system tiller-external | head -n1)
   - helm repo update
+  - go get -u github.com/dave/courtney
+  - go get -t -v ./...
   - make bootstrap build helmrel cov
   # run Additionally/ External Coverage/ Unit Tests
   - ./.dev/test_cli.sh
