@@ -149,7 +149,6 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	// initialize Repo index first
 	index, err := initSearch(out, &searchRepo)
 	if err != nil {
-		// TODO: Find a better way to exit
 		log.Fatalf("%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
 	}
 
