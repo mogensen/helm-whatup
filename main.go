@@ -66,6 +66,10 @@ with the '--output' Flag.
 `
 
 var ignoreNoRepo bool = false
+var showVersion bool = false
+
+var gitCommit string
+var version string
 
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	client := action.NewList(cfg)
@@ -78,6 +82,11 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 		Aliases: []string{"od"},
 		Args:    require.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+                        if showVersion {
+		                fmt.Fprintln(out, "Version:", version)
+		                fmt.Fprintln(out, "GitCommit:", gitCommit)
+		                return nil
+                        }
 			if client.AllNamespaces {
 				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
 					return err
@@ -114,6 +123,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	flags.BoolVarP(&client.AllNamespaces, "all-namespaces", "A", false, "list releases across all namespaces")
 	flags.IntVarP(&client.Limit, "max", "m", 256, "maximum number of releases to fetch")
 	flags.IntVar(&client.Offset, "offset", 0, "next release name in the list, used to offset from start value")
+	flags.BoolVar(&showVersion, "version", false, "show version information")
 	bindOutputFlag(cmd, &outfmt)
 
 	return cmd

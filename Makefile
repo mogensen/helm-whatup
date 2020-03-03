@@ -1,8 +1,9 @@
 HELM_HOME ?= $(shell helm home)
 HELM_PLUGIN_DIR ?= $(HELM_HOME)/plugins/helm-whatup
 VERSION := $(shell sed -n -e 's/version:[ "]*\([^"]*\).*/\1/p' plugin.yaml)
+GIT_COMMIT := $(shell git rev-list -1 HEAD)
 DIST := $(CURDIR)/_dist
-LDFLAGS := "-X main.version=${VERSION}"
+LDFLAGS := "-X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT}"
 
 .PHONY: helmrel
 helmrel:
@@ -34,9 +35,9 @@ build:
 .PHONY: dist
 dist:
 	mkdir -p $(DIST)
-	GOOS=linux GOARCH=amd64 go build -o bin/helm-whatup ./main.go
+	GOOS=linux GOARCH=amd64 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
 	tar -zcvf $(DIST)/helm-whatup-$(VERSION)-linux-amd64.tar.gz bin/helm-whatup README.md LICENSE.md plugin.yaml
-	GOOS=darwin GOARCH=amd64 go build -o bin/helm-whatup ./main.go
+	GOOS=darwin GOARCH=amd64 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
 	tar -zcvf $(DIST)/helm-whatup-$(VERSION)-darwin-amd64.tar.gz bin/helm-whatup README.md LICENSE.md plugin.yaml
 
 
