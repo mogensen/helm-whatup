@@ -44,4 +44,4 @@ dist:
 .PHONY: bootstrap
 bootstrap:
 	go mod download
-	# go get -u github.com/dave/courtney
+	go get -u github.com/dave/courtney
