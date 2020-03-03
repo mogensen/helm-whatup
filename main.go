@@ -159,9 +159,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	// initialize Repo index first
 	index, err := initSearch(out, &searchRepo)
 	if err != nil {
-		// TODO: Find a better way to exit
-		fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
-		os.Exit(1)
+		log.Fatalf("%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
 	}
 
 	results := index.All()
@@ -170,10 +168,9 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		repoResult, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
 		if err != nil {
 			if !ignoreNoRepo {
-				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
-				os.Exit(1)
+				log.Fatalf("%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
 			} else {
-				fmt.Fprintf(out, "WARNING: No Repo was found which containing the Chart '%s' (skipping)\n", r.Chart.Name())
+				log.Printf("WARNING: No Repo was found which containing the Chart '%s' (skipping)\n", r.Chart.Name())
 				continue
 			}
 		}
@@ -336,7 +333,7 @@ func (o *searchRepoOptions) buildIndex(out io.Writer) (*search.Index, error) {
 		ind, err := repo.LoadIndexFile(f)
 		if err != nil {
 			// TODO should print to stderr
-			fmt.Fprintf(out, "WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
+			log.Printf("WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
 			continue
 		}
 
