@@ -206,8 +206,8 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 // It will return a Pointer to the Chart Result (the Pointer points to the
 // Result of the Index).
 // If no results are found, nil will be returned instead of type *Result.
-func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, error) {
-	found := false // found describres if Charts where found but no one is newer than the actual one
+// And the bool describes if it may be some Repositories contain a deprecated chart.
+func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, bool, error) {
 
 	// TODO: implement a better Searchalgorithm. Because this is an
 	// linear search algorithm so it takes O(len(r)) steps in the worst case
@@ -217,7 +217,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			// check if Version is newer than the actual one
 			version, err := semver.NewVersion(result.Chart.Metadata.Version)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			var constrainStr string
@@ -248,11 +248,13 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	if !found {
 		debug("Could not find any Repo which contains %s", name)
-		return nil, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
+		return nil, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
+	}
+
 	}
 
 	debug("No newer Chart was found for '%s'", name)
-	return nil, nil
+	return nil, false, nil
 }
 
 func (r *outdatedListWriter) WriteTable(out io.Writer) error {
