@@ -159,7 +159,9 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	// initialize Repo index first
 	index, err := initSearch(out, &searchRepo)
 	if err != nil {
-		log.Fatalf("%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
+		// TODO: Find a better way to exit
+		fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
+		os.Exit(1)
 	}
 
 	results := index.All()
@@ -168,9 +170,10 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		repoResult, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
 		if err != nil {
 			if !ignoreNoRepo {
-				log.Fatalf("%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
+				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
+				os.Exit(1)
 			} else {
-				log.Printf("WARNING: No Repo was found which containing the Chart '%s' (skipping)\n", r.Chart.Name())
+				fmt.Fprintf(out, "WARNING: No Repo was found which containing the Chart '%s' (skipping)\n", r.Chart.Name())
 				continue
 			}
 		}
