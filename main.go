@@ -26,6 +26,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gosuri/uitable"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -70,6 +71,7 @@ var showVersion bool = false
 
 var gitCommit string
 var version string
+var deprecationInfo bool // deprecationInfo describes if the "DEPRECTATION" notice will be printed or not
 
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	client := action.NewList(cfg)
@@ -82,11 +84,6 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 		Aliases: []string{"od"},
 		Args:    require.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-                        if showVersion {
-		                fmt.Fprintln(out, "Version:", version)
-		                fmt.Fprintln(out, "GitCommit:", gitCommit)
-		                return nil
-                        }
 			if client.AllNamespaces {
 				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
 					return err
@@ -108,6 +105,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
+	flags.BoolVar(&deprecationInfo, "deprecation-notice", true, "disable it to prevent printing the deprecation notice message")
 	flags.BoolVar(&ignoreNoRepo, "ignore-repo", false, "ignore error if no repo for a chart is found")
 	flags.Bool("devel", false, "use development versions (alpha, beta, and release candidate releases), too. Equivalent to version '>0.0.0-0'.")
 	flags.BoolVarP(&client.Short, "short", "q", false, "output short (quiet) listing format")
@@ -376,7 +374,7 @@ func (o *searchRepoOptions) buildIndex(out io.Writer) (*search.Index, error) {
 		ind, err := repo.LoadIndexFile(f)
 		if err != nil {
 			// TODO should print to stderr
-			log.Printf("WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
+			fmt.Fprintf(out, "WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
 			continue
 		}
 
