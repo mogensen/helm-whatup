@@ -208,6 +208,12 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
 func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, bool, error) {
+	//  since we have now to check also if a repository contains an
+	// deprecated chart we need an "point" where to look if we have found
+	// a newer chart version
+	foundNewer := false
+	found := false                 // found describes if Charts where found but no one is newer than the actual one
+	var duplicate []*search.Result // this variable contains all repositories which contains the searched chart
 
 	// TODO: implement a better Searchalgorithm. Because this is an
 	// linear search algorithm so it takes O(len(r)) steps in the worst case
@@ -229,14 +235,31 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 			constrain, err := semver.NewConstraint(constrainStr)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			debug("Comparing version of original chart '%s' => %s with version (%s) %s",
 				name, chartVersion, result.Name, result.Chart.Metadata.Version)
 			debug("Using '%s' as constrain against '%s'", constrainStr, result.Chart.Metadata.Version)
 			if constrain.Check(version) {
-				return result, nil
+				// only return if 'deprecationInfo' is set to false
+				// because then we do not have to chec if there
+				// are deprecated repositories.
+				if !deprecationInfo {
+					return result, false, nil
+				} else {
+					foundNewer = true
+				}
+			}
+
+			if deprecationInfo {
+				// add this Repository to the @duplicate variable, even
+				// if the version is not newer than the current installed.
+				// This is because if the chart was installed at the time
+				// where the repository stopped maintaining the Chart
+				// we would not know it – later – that this Repo is
+				// deperecated.
+				duplicate = append(duplicate, result)
 			}
 
 			// set 'found' to true because a Repository contains
@@ -251,6 +274,14 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		return nil, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
 	}
 
+	if deprecationInfo && foundNewer {
+		// if @duplicate contains more than 1 entry then we have to check if
+		// a repository contains a deprecated Chart.
+		if len(duplicate) > 1 {
+			checkDeprecation(duplicate)
+		}
+
+		return nil, true, nil
 	}
 
 	debug("No newer Chart was found for '%s'", name)
