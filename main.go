@@ -135,6 +135,7 @@ type outdatedElement struct {
 	Namespace    string    `json:"namespace"`
 	InstalledVer string    `json:"installed_version"`
 	LatestVer    string    `json:"latest_version"`
+	AppVer       string    `json:"app_version"` // AppVer does contain the App version defined in 'Chart.yaml'
 	Chart        string    `json:"chart"`
 	Updated      time.Time `json:"updated"` // Updated contains the last time where the chart in the repository was updated
 }
@@ -321,8 +322,10 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			repos = append(repos, outdatedElement{
 				Name:         name,
 				InstalledVer: chartVersion,
+				AppVer:       c.Chart.Metadata.AppVersion,
 				LatestVer:    c.Chart.Metadata.Version,
 				Chart:        c.Name,
+				Updated:      c.Chart.Created,
 			})
 		}
 
@@ -354,11 +357,51 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 	table := uitable.New()
+
 	table.AddRow("NAME", "NAMESPACE", "INSTALLED VERSION", "LATEST VERSION", "CHART")
 	for _, r := range r.releases {
 		table.AddRow(r.Name, r.Namespace, r.InstalledVer, r.LatestVer, r.Chart)
 	}
-	return output.EncodeTable(out, table)
+
+	// write basic table and then add additional information if we found multiple repositories which do serve one (or more)
+	// deployed chart(s)
+	err := output.EncodeTable(out, table)
+	if err != nil {
+		return err
+	}
+
+	if len(r.repoDuplicates) == 0 {
+		return nil
+	}
+
+	// print detailed information about "duplicated" repos
+	fmt.Fprintf(out, "\n\n\n")
+
+	for _, dc := range r.repoDuplicates {
+		fmt.Fprintln(out, "----")
+
+		// first print basic information about current deployment
+		fmt.Fprintf(out, "%-24s%s\n", "NAME", dc.Name)
+		fmt.Fprintf(out, "%-24s%s\n", "NAMESPACE", dc.Namespace)
+		fmt.Fprintf(out, "%-24s%s\n\n", "INSTALLED VERSION", dc.Repos[0].InstalledVer)
+		// fmt.Fprintf(out, "%24s%s\n", "LATEST APP VERSION", dc.Repos[0].AppVer) // TODO(l0nax): Implement me
+
+		// print repository table
+		table = uitable.New()
+
+		table.AddRow("REPOSITORY", "AVAILABLE VERSION", "APP VERSION", "UPDATED")
+		for _, r := range dc.Repos {
+			table.AddRow(strings.Split(r.Chart, "/")[0], r.LatestVer, r.AppVer, r.Updated.String())
+		}
+
+		err := output.EncodeTable(out, table)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = fmt.Fprintln(out, "----")
+	return err
 }
 
 func (r *outdatedListWriter) WriteJSON(out io.Writer) error {
