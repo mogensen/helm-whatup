@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -66,12 +67,12 @@ with the '--output' Flag.
 var (
 	ignoreNoRepo bool = false
 	showVersion  bool = false
-)
 
-var (
 	gitCommit       string
 	version         string
 	deprecationInfo bool // deprecationInfo describes if the "DEPRECTATION" notice will be printed or not
+
+	// repoDuplicates
 )
 
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
@@ -101,6 +102,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			return outfmt.Write(out, newOutdatedListWriter(releases, cfg, out, devel))
 		},
 	}
@@ -129,19 +131,43 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 }
 
 type outdatedElement struct {
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	InstalledVer string `json:"installed_version"`
-	LatestVer    string `json:"latest_version"`
-	Chart        string `json:"chart"`
+	Name         string    `json:"name"`
+	Namespace    string    `json:"namespace"`
+	InstalledVer string    `json:"installed_version"`
+	LatestVer    string    `json:"latest_version"`
+	Chart        string    `json:"chart"`
+	Updated      time.Time `json:"updated"` // Updated contains the last time where the chart in the repository was updated
+}
+
+type repoDuplicate struct {
+	Name      string            `json:"deploy_name"` // Name contains the deployment name
+	Namespace string            `json:"namespace"`   // Namespace contains the deployment namespace
+	Repos     []outdatedElement `json:"repos"`       // Repos does contain all the repositories which do serve this chart
 }
 
 type outdatedListWriter struct {
-	releases []outdatedElement // Outdated releases
+	releases       []outdatedElement // Outdated releases
+	repoDuplicates []repoDuplicate
+}
+
+type searchType uint8
+
+const (
+	CHART searchType = iota + 1 // CHART search results do contain only one repository which has been found
+	REPOS                       // REPOS search results do contain multiple repository which do serve the requested chart
+)
+
+// searchResult describes the result which has been found while searching a repository which does serve the requested chart
+type searchResult struct {
+	Type searchType
+
+	chart *search.Result // chart will contain information about the (newer) chart if @Type is @CHART
+	repos repoDuplicate  // repos will contain information if @Type is @REPOS
 }
 
 func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuration, out io.Writer, devel bool) *outdatedListWriter {
 	outdated := make([]outdatedElement, 0, len(releases))
+	dups := make([]repoDuplicate, 0, len(releases))
 
 	// we initialize the Struct with default Options but the 'devel' option can be set by the User, all the other ones are not
 	// relevant.
@@ -163,7 +189,9 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		os.Exit(1)
 	}
 
+	// get all locally indexed charts
 	results := index.All()
+
 	for _, r := range releases {
 		// search if it exists a newer Chart in the Chart-Repository
 		repoResult, dep, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
@@ -178,20 +206,28 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		}
 
 		// skip if no newer Chart was found
-		if repoResult == nil || !dep {
+		if !dep {
 			continue
 		}
 
-		outdated = append(outdated, outdatedElement{
-			Name:         r.Name,
-			Namespace:    r.Namespace,
-			InstalledVer: r.Chart.Metadata.Version,
-			LatestVer:    repoResult.Chart.Metadata.Version,
-			Chart:        repoResult.Chart.Name,
-		})
+		if repoResult.Type == CHART {
+			outdated = append(outdated, outdatedElement{
+				Name:         r.Name,
+				Namespace:    r.Namespace,
+				InstalledVer: r.Chart.Metadata.Version,
+				LatestVer:    repoResult.chart.Chart.Metadata.Version,
+				Chart:        repoResult.chart.Chart.Name,
+			})
+		} else {
+			repoResult.repos.Namespace = r.Namespace
+			dups = append(dups, repoResult.repos)
+		}
 	}
 
-	return &outdatedListWriter{outdated}
+	return &outdatedListWriter{
+		releases:       outdated,
+		repoDuplicates: dups,
+	}
 }
 
 func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
@@ -204,61 +240,67 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 }
 
 // searchChart searches for Repositories which are containing that chart.
+// @name does contain the (deployed) chart named.
 //
-// It will return a Pointer to the Chart Result (the Pointer points to the Result of the Index).
+// It will return a struct with all search information.
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
-func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, bool, error) {
+func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (searchResult, bool, error) {
+	ret := searchResult{}
+
 	// since we have now to check also if a repository contains an
 	// deprecated chart we need an "point" where to look if we have found
 	// a newer chart version
 	foundNewer := false
-	found := false                 // found describes if Charts where found but no one is newer than the actual one
-	var duplicate []*search.Result // this variable contains all repositories which contains the searched chart
+	found := false                  // found describes if Charts where found but no one is newer than the actual one
+	var chartRepos []*search.Result // chartRepos contains all repositories which contains the searched chart
 
-	// TODO: implement a better search algorithm. Because this is an
-	// linear search algorithm so it takes O(len(r)) steps in the worst case
+	// prepare the constrain string so we do not have the re-calculate it every time
+	var constrainStr string
+	if devel {
+		constrainStr = "> " + chartVersion + "-0" + " != " + chartVersion
+	} else {
+		constrainStr = "> " + chartVersion
+	}
+
+	// TODO: implement a better search algorithm. Because this is an linear search algorithm so it takes O(len(r)) steps in the
+	// worst case
 	for _, result := range r {
 		// check if the Chart-Result Name is that one we are searching for.
 		if strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
 			// check if Version is newer than the actual one
 			version, err := semver.NewVersion(result.Chart.Metadata.Version)
 			if err != nil {
-				return nil, false, err
-			}
-
-			var constrainStr string
-			if devel {
-				constrainStr = "> " + chartVersion + "-0" + " != " + chartVersion
-			} else {
-				constrainStr = "> " + chartVersion
+				return ret, false, err
 			}
 
 			constrain, err := semver.NewConstraint(constrainStr)
 			if err != nil {
-				return nil, false, err
+				return ret, false, err
 			}
 
 			debug("Comparing version of original chart '%s' => %s with version (%s) %s",
 				name, chartVersion, result.Name, result.Chart.Metadata.Version)
 			debug("Using '%s' as constrain against '%s'", constrainStr, result.Chart.Metadata.Version)
 			if constrain.Check(version) {
-				// only return if 'deprecationInfo' is set to false
-				// because then we do not have to check if there
-				// are deprecated repositories.
-				if !deprecationInfo {
-					return result, false, nil
-				} else {
-					foundNewer = true
-				}
+				debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, chartVersion)
+				foundNewer = true
+
+				// TODO(l0nax): We can not skip because the versioning may differs!!
+
+				// // continue since this chart does not have a newer chart
+				// continue
 			}
 
-			if deprecationInfo {
-				// add this Repository to the @duplicate variable, even if the version is not newer than the current installed.
-				// This is because if the chart was installed at the time where the repository stopped maintaining the Chart we
-				// would not know it – later – that this Repo is deperecated.
-				duplicate = append(duplicate, result)
-			}
+			// // TODO(l0nax): refactor me ==> @duplicate append MUST be moved out of this if-block! */
+			// if deprecationInfo {
+			//     // add this Repository to the @duplicate variable, even if the version is not newer than the current installed.
+			//     // This is because if the chart was installed at the time where the repository stopped maintaining the Chart we
+			//     // would not know it – later – that this Repo is deperecated.
+			//     chartRepos = append(chartRepos, result)
+			// }
+
+			chartRepos = append(chartRepos, result)
 
 			// set 'found' to true because a Repository contains the Chart but the Version is not newer than the installed one.
 			found = true
@@ -267,20 +309,47 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	if !found {
 		debug("Could not find any Repo which contains %s", name)
-		return nil, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
+		return ret, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
+	}
+
+	// check if we have multiple repositories which do serve the chart
+	if len(chartRepos) > 1 {
+		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), name)
+		repos := []outdatedElement{}
+
+		for _, c := range chartRepos {
+			repos = append(repos, outdatedElement{
+				Name:         name,
+				InstalledVer: chartVersion,
+				LatestVer:    c.Chart.Metadata.Version,
+				Chart:        c.Name,
+			})
+		}
+
+		ret.Type = REPOS
+		ret.repos = repoDuplicate{
+			Name:  name,
+			Repos: repos,
+		}
+
+		return ret, true, nil
 	}
 
 	if deprecationInfo && foundNewer {
+		ret.Type = CHART
+		ret.chart = chartRepos[0]
+
 		// if @duplicate contains more than 1 entry then we have to check if a repository contains a deprecated Chart.
-		if len(duplicate) > 1 {
-			checkDeprecation(duplicate)
+		if len(chartRepos) > 1 {
+			checkDeprecation(chartRepos)
 		}
 
-		return nil, true, nil
+		// TODO(l0nax): Correct me
+		return ret, true, nil
 	}
 
 	debug("No newer Chart was found for '%s'", name)
-	return nil, false, nil
+	return ret, false, nil
 }
 
 func (r *outdatedListWriter) WriteTable(out io.Writer) error {
@@ -303,6 +372,8 @@ func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
 /// ===== Internal required Functions ====== ///
 
 // checkDeprecation checks if there are repositories which are serving deprecated charts.
+//
+// TODO(l0nax): Implement me
 func checkDeprecation(res []*search.Result) {
 }
 
