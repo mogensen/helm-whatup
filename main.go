@@ -137,7 +137,8 @@ type outdatedElement struct {
 	LatestVer    string    `json:"latest_version"`
 	AppVer       string    `json:"app_version"` // AppVer does contain the App version defined in 'Chart.yaml'
 	Chart        string    `json:"chart"`
-	Updated      time.Time `json:"updated"` // Updated contains the last time where the chart in the repository was updated
+	Updated      time.Time `json:"updated"`    // Updated contains the last time where the chart in the repository was updated
+	Deprecated   bool      `json:"deprecated"` // Deprecated does contain `deprecated` field from the Chart.yaml file
 }
 
 type repoDuplicate struct {
@@ -326,6 +327,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 				LatestVer:    c.Chart.Metadata.Version,
 				Chart:        c.Name,
 				Updated:      c.Chart.Created,
+				Deprecated:   c.Chart.Deprecated,
 			})
 		}
 
@@ -375,7 +377,7 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 	}
 
 	// print detailed information about "duplicated" repos
-	fmt.Fprintf(out, "\n\n\n")
+	fmt.Fprintf(out, "\n\n")
 
 	for _, dc := range r.repoDuplicates {
 		fmt.Fprintln(out, "----")
@@ -389,9 +391,9 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 		// print repository table
 		table = uitable.New()
 
-		table.AddRow("REPOSITORY", "AVAILABLE VERSION", "APP VERSION", "UPDATED")
+		table.AddRow("REPOSITORY", "DEPRECATED", "CHART VERSION", "APP VERSION", "UPDATED")
 		for _, r := range dc.Repos {
-			table.AddRow(strings.Split(r.Chart, "/")[0], r.LatestVer, r.AppVer, r.Updated.String())
+			table.AddRow(strings.Split(r.Chart, "/")[0], r.Deprecated, r.LatestVer, r.AppVer, r.Updated.UTC().String())
 		}
 
 		err := output.EncodeTable(out, table)
