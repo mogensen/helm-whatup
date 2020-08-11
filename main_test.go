@@ -5,16 +5,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 func TestClient(t *testing.T) {
 	_, err := newClient()
-
 	if err != nil {
 		t.Errorf("Excpected to get *helm.Client but got intead an Error: %s", err.Error())
 		return
@@ -29,7 +29,7 @@ func TestClient(t *testing.T) {
 
 func TestCharts(t *testing.T) {
 	// 10 released/ installed Charts
-	var expectedResults = []byte(`[
+	expectedResults := []byte(`[
 	{
 		"releaseName": "coredns",
 		"chartName": "coredns",
@@ -99,7 +99,6 @@ func TestCharts(t *testing.T) {
 	]`)
 
 	client, err := newClient()
-
 	if err != nil {
 		t.Errorf("Excpected to get *helm.Client but got intead an Error: %s", err.Error())
 	}
@@ -162,7 +161,7 @@ func TestCharts(t *testing.T) {
 
 	if !outputEqual {
 		fmt.Printf(outputFormat)
-		//t.Errorf("Expected Output is equal with expectation but got 'false'!")
+		// t.Errorf("Expected Output is equal with expectation but got 'false'!")
 	}
 }
 

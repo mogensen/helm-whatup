@@ -26,7 +26,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gosuri/uitable"
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -40,9 +39,7 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
-var (
-	settings = cli.New()
-)
+var settings = cli.New()
 
 func main() {
 	// get action config first
@@ -66,12 +63,16 @@ By default, the output is printed in a Table but you can change this behavior
 with the '--output' Flag.
 `
 
-var ignoreNoRepo bool = false
-var showVersion bool = false
+var (
+	ignoreNoRepo bool = false
+	showVersion  bool = false
+)
 
-var gitCommit string
-var version string
-var deprecationInfo bool // deprecationInfo describes if the "DEPRECTATION" notice will be printed or not
+var (
+	gitCommit       string
+	version         string
+	deprecationInfo bool // deprecationInfo describes if the "DEPRECTATION" notice will be printed or not
+)
 
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	client := action.NewList(cfg)
@@ -311,7 +312,6 @@ func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
 // checkDeprecation checks if there are repositories which are serving deprecated
 // charts.
 func checkDeprecation(res []*search.Result) {
-
 }
 
 func debug(format string, v ...interface{}) {
