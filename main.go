@@ -143,8 +143,8 @@ type outdatedListWriter struct {
 func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuration, out io.Writer, devel bool) *outdatedListWriter {
 	outdated := make([]outdatedElement, 0, len(releases))
 
-	// we initialize the Struct with default Options but the 'devel' option
-	// can be set by the User, all the other ones are not relevant.
+	// we initialize the Struct with default Options but the 'devel' option can be set by the User, all the other ones are not
+	// relevant.
 	searchRepo := searchRepoOptions{
 		versions:     false,
 		regexp:       false,
@@ -166,7 +166,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	results := index.All()
 	for _, r := range releases {
 		// search if it exists a newer Chart in the Chart-Repository
-		repoResult, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
+		repoResult, dep, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
 		if err != nil {
 			if !ignoreNoRepo {
 				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
@@ -178,7 +178,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		}
 
 		// skip if no newer Chart was found
-		if repoResult == nil {
+		if repoResult == nil || !dep {
 			continue
 		}
 
@@ -205,19 +205,18 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 
 // searchChart searches for Repositories which are containing that chart.
 //
-// It will return a Pointer to the Chart Result (the Pointer points to the
-// Result of the Index).
+// It will return a Pointer to the Chart Result (the Pointer points to the Result of the Index).
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
 func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, bool, error) {
-	//  since we have now to check also if a repository contains an
+	// since we have now to check also if a repository contains an
 	// deprecated chart we need an "point" where to look if we have found
 	// a newer chart version
 	foundNewer := false
 	found := false                 // found describes if Charts where found but no one is newer than the actual one
 	var duplicate []*search.Result // this variable contains all repositories which contains the searched chart
 
-	// TODO: implement a better Searchalgorithm. Because this is an
+	// TODO: implement a better search algorithm. Because this is an
 	// linear search algorithm so it takes O(len(r)) steps in the worst case
 	for _, result := range r {
 		// check if the Chart-Result Name is that one we are searching for.
@@ -245,7 +244,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			debug("Using '%s' as constrain against '%s'", constrainStr, result.Chart.Metadata.Version)
 			if constrain.Check(version) {
 				// only return if 'deprecationInfo' is set to false
-				// because then we do not have to chec if there
+				// because then we do not have to check if there
 				// are deprecated repositories.
 				if !deprecationInfo {
 					return result, false, nil
@@ -255,18 +254,13 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			}
 
 			if deprecationInfo {
-				// add this Repository to the @duplicate variable, even
-				// if the version is not newer than the current installed.
-				// This is because if the chart was installed at the time
-				// where the repository stopped maintaining the Chart
-				// we would not know it – later – that this Repo is
-				// deperecated.
+				// add this Repository to the @duplicate variable, even if the version is not newer than the current installed.
+				// This is because if the chart was installed at the time where the repository stopped maintaining the Chart we
+				// would not know it – later – that this Repo is deperecated.
 				duplicate = append(duplicate, result)
 			}
 
-			// set 'found' to true because a Repository contains
-			// the Chart but the Version is not newer than
-			// the installed one.
+			// set 'found' to true because a Repository contains the Chart but the Version is not newer than the installed one.
 			found = true
 		}
 	}
@@ -277,8 +271,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 	}
 
 	if deprecationInfo && foundNewer {
-		// if @duplicate contains more than 1 entry then we have to check if
-		// a repository contains a deprecated Chart.
+		// if @duplicate contains more than 1 entry then we have to check if a repository contains a deprecated Chart.
 		if len(duplicate) > 1 {
 			checkDeprecation(duplicate)
 		}
@@ -309,8 +302,7 @@ func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
 
 /// ===== Internal required Functions ====== ///
 
-// checkDeprecation checks if there are repositories which are serving deprecated
-// charts.
+// checkDeprecation checks if there are repositories which are serving deprecated charts.
 func checkDeprecation(res []*search.Result) {
 }
 
@@ -324,8 +316,7 @@ func debug(format string, v ...interface{}) {
 // NOTE: Copied from https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/flags.go#L54
 const outputFlag = "output"
 
-// bindOutputFlag will add the output flag to the given command and bind the
-// value to the given format pointer
+// bindOutputFlag will add the output flag to the given command and bind the value to the given format pointer
 func bindOutputFlag(cmd *cobra.Command, varRef *output.Format) {
 	cmd.Flags().VarP(newOutputValue(output.Table, varRef), outputFlag, "o",
 		fmt.Sprintf("prints the output in the specified format. Allowed values: %s", strings.Join(output.Formats(), ", ")))
@@ -390,9 +381,8 @@ func isNotExist(err error) bool {
 
 // NOTE: Copied from  https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/flags.go#L68
 func (o *outputValue) String() string {
-	// It is much cleaner looking (and technically less allocations) to just
-	// convert to a string rather than type asserting to the underlying
-	// output.Format
+	// It is much cleaner looking (and technically less allocations) to just convert to a string rather than type asserting to the
+	// underlying output.Format
 	return string(*o)
 }
 
