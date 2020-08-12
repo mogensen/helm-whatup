@@ -22,7 +22,7 @@ the version against the latest deployed version of your charts in the Kubernetes
 | `whatup` Version | Supported helm version |
 |------------------|------------------------|
 | 0.2.x            | 2.x                    |
-| 0.3.x            | 3.x                    |
+| >= 0.3.x         | 3.x                    |
 
 _NOTE: If you use a helm v3 Client you need to install the latest `whatup` Version!_
 
@@ -38,19 +38,19 @@ helm whatup
 Example output of `helm whatup`:
 
 ```bash
-NAME                       	NAMESPACE	INSTALLED VERSION	LATEST VERSION	CHART                      
+NAME                       	NAMESPACE	INSTALLED VERSION	LATEST VERSION	CHART
 atlassian-confluence-server	devops   	1.0.4            	1.0.5         	atlassian-confluence-server
-atlassian-crucible         	devops   	0.1.1            	0.1.3         	atlassian-crucible         
-atlassian-jira-software    	devops   	0.3.10           	0.3.11        	atlassian-jira-software    
-confluence-mysql           	devops   	1.4.0            	1.6.2         	mysql                      
-fileshare                  	devops   	1.7.0            	1.9.1         	nextcloud                  
+atlassian-crucible         	devops   	0.1.1            	0.1.3         	atlassian-crucible
+atlassian-jira-software    	devops   	0.3.10           	0.3.11        	atlassian-jira-software
+confluence-mysql           	devops   	1.4.0            	1.6.2         	mysql
+fileshare                  	devops   	1.7.0            	1.9.1         	nextcloud
 fileshare-postgres         	devops   	6.2.1            	8.1.2         	postgresql
 ```
 
 ## Install
 
 ```bash
-$ helm plugin install https://github.com/fabmation-gmbh/helm-whatup
+helm plugin install https://github.com/fabmation-gmbh/helm-whatup
 ```
 
 The above will fetch the latest binary release of `helm whatup` and install it.
