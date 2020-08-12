@@ -267,38 +267,40 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 	// worst case
 	for _, result := range r {
 		// check if the Chart-Result Name is that one we are searching for.
-		if strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
-			// check if Version is newer than the actual one
-			version, err := semver.NewVersion(result.Chart.Metadata.Version)
-			if err != nil {
-				return ret, false, err
-			}
-
-			constrain, err := semver.NewConstraint(constrainStr)
-			if err != nil {
-				return ret, false, err
-			}
-
-			debug("Comparing version of original chart '%s' => %s with version (%s) %s [constrain: '%s']",
-				name, chartVersion, result.Name, result.Chart.Metadata.Version, constrainStr)
-			if constrain.Check(version) {
-				debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, chartVersion)
-				foundNewer = true
-			}
-
-			// // TODO(l0nax): refactor me ==> @duplicate append MUST be moved out of this if-block! */
-			// if deprecationInfo {
-			//     // add this Repository to the @duplicate variable, even if the version is not newer than the current installed.
-			//     // This is because if the chart was installed at the time where the repository stopped maintaining the Chart we
-			//     // would not know it – later – that this Repo is deperecated.
-			//     chartRepos = append(chartRepos, result)
-			// }
-
-			chartRepos = append(chartRepos, result)
-
-			// set 'found' to true because a Repository contains the Chart but the Version is not newer than the installed one.
-			found = true
+		if !strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
+			continue
 		}
+
+		// check if Version is newer than the actual one
+		version, err := semver.NewVersion(result.Chart.Metadata.Version)
+		if err != nil {
+			return ret, false, err
+		}
+
+		constrain, err := semver.NewConstraint(constrainStr)
+		if err != nil {
+			return ret, false, err
+		}
+
+		debug("Comparing version of original chart '%s' => %s with version (%s) %s [constrain: '%s']",
+			name, chartVersion, result.Name, result.Chart.Metadata.Version, constrainStr)
+		if constrain.Check(version) {
+			debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, chartVersion)
+			foundNewer = true
+		}
+
+		// // TODO(l0nax): refactor me ==> @duplicate append MUST be moved out of this if-block! */
+		// if deprecationInfo {
+		//     // add this Repository to the @duplicate variable, even if the version is not newer than the current installed.
+		//     // This is because if the chart was installed at the time where the repository stopped maintaining the Chart we
+		//     // would not know it – later – that this Repo is deperecated.
+		//     chartRepos = append(chartRepos, result)
+		// }
+
+		chartRepos = append(chartRepos, result)
+
+		// set 'found' to true because a Repository contains the Chart but the Version is not newer than the installed one.
+		found = true
 	}
 
 	if !found {
