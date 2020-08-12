@@ -5,14 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 
+## 0.4.1 (2020-08-12)
+
+### Changed (1 change)
+- Enable 'ignore-repo' flag default ([#25](https://github.com/fabmation-gmbh/helm-whatup/issues/25))
+
+
 ## 0.4.0 (2020-08-12)
+
+### Fixed (2 changes)
+- Fix 'multiple repos with same charts' bug [#21]
+- Link binaries statically to prevent 'no such file or directory' crashes ([#26](https://github.com/fabmation-gmbh/helm-whatup/issues/26))
 
 ### Added (1 change)
 - Add environment variable mapping for the '--ignore-repo' and '--deprecation-notice' flags
-
-### Fixed (2 changes)
-- Link binaries statically to prevent 'no such file or directory' crashes ([#26](https://github.com/fabmation-gmbh/helm-whatup/issues/26))
-- Fix 'multiple repos with same charts' bug [#21]
 
 
 ## 0.3.2 (2019-12-17)
@@ -39,6 +45,6 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ## 0.2.0 (2019-07-25)
 
 ### Added (2 changes)
-- Add TLS Support ([#1](https://github.com/fabmation-gmbh/helm-whatup/issues/1), [bacongobbler/helm-whatup#6](https://github.com/bacongobbler/helm-whatup/issues/6))
 - Add _table_ Output Format ([#3](https://github.com/fabmation-gmbh/helm-whatup/issues/3))
+- Add TLS Support ([#1](https://github.com/fabmation-gmbh/helm-whatup/issues/1), [bacongobbler/helm-whatup#6](https://github.com/bacongobbler/helm-whatup/issues/6))
 
