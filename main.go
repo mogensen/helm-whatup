@@ -258,11 +258,9 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 	var chartRepos []*search.Result // chartRepos contains all repositories which contains the searched chart
 
 	// prepare the constrain string so we do not have the re-calculate it every time
-	var constrainStr string
+	constrainStr := "> " + chartVersion
 	if devel {
-		constrainStr = "> " + chartVersion + "-0" + " != " + chartVersion
-	} else {
-		constrainStr = "> " + chartVersion
+		constrainStr += "-0" + " != " + chartVersion
 	}
 
 	// TODO: implement a better search algorithm. Because this is an linear search algorithm so it takes O(len(r)) steps in the
@@ -281,17 +279,11 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 				return ret, false, err
 			}
 
-			debug("Comparing version of original chart '%s' => %s with version (%s) %s",
-				name, chartVersion, result.Name, result.Chart.Metadata.Version)
-			debug("Using '%s' as constrain against '%s'", constrainStr, result.Chart.Metadata.Version)
+			debug("Comparing version of original chart '%s' => %s with version (%s) %s [constrain: '%s']",
+				name, chartVersion, result.Name, result.Chart.Metadata.Version, constrainStr)
 			if constrain.Check(version) {
 				debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, chartVersion)
 				foundNewer = true
-
-				// TODO(l0nax): We can not skip because the versioning may differs!!
-
-				// // continue since this chart does not have a newer chart
-				// continue
 			}
 
 			// // TODO(l0nax): refactor me ==> @duplicate append MUST be moved out of this if-block! */
