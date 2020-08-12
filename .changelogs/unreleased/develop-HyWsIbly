@@ -1,0 +1,2 @@
+title: Link binaries statically to prevent 'no such file or directory' crashes ([#26](https://github.com/fabmation-gmbh/helm-whatup/issues/26))
+type: 1
