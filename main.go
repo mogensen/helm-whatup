@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,8 +72,6 @@ var (
 	gitCommit       string
 	version         string
 	deprecationInfo bool // deprecationInfo describes if the "DEPRECTATION" notice will be printed or not
-
-	// repoDuplicates
 )
 
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
@@ -85,6 +84,10 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 		Long:    outdatedHelp,
 		Aliases: []string{"od"},
 		Args:    require.NoArgs,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// bind flags against environment variables
+			return initializeViper(cmd)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if client.AllNamespaces {
 				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
@@ -125,9 +128,35 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	flags.IntVarP(&client.Limit, "max", "m", 256, "maximum number of releases to fetch")
 	flags.IntVar(&client.Offset, "offset", 0, "next release name in the list, used to offset from start value")
 	flags.BoolVar(&showVersion, "version", false, "show version information")
+
 	bindOutputFlag(cmd, &outfmt)
 
 	return cmd
+}
+
+// initializeViper initializes the viper (flag environment variable binding)
+func initializeViper(cmd *cobra.Command) error {
+	// NOTE: I wasn't able to get the 'automatic environment variable mapping' working so I do it manually
+
+	// `ignore-repo`
+	if str := os.Getenv("HELM_WHATUP_IGNORE_REPO"); str != "" {
+		if _, err := strconv.ParseBool(str); err == nil {
+			if err := cmd.Flags().Set("ignore-repo", str); err != nil {
+				log.Fatalf("Error while parsing 'HELM_WHATUP_IGNORE_REPO' environment variable: %s", err.Error())
+			}
+		}
+	}
+
+	// `deprecation-notice`
+	if str := os.Getenv("HELM_WHATUP_DEPRECATION_NOTICE"); str != "" {
+		if _, err := strconv.ParseBool(str); err == nil {
+			if err := cmd.Flags().Set("deprecation-notice", str); err != nil {
+				log.Fatalf("Error while parsing 'HELM_WHATUP_DEPRECATION_NOTICE' environment variable: %s", err.Error())
+			}
+		}
+	}
+
+	return nil
 }
 
 type outdatedElement struct {
