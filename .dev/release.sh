@@ -26,14 +26,7 @@ x() {
     ${@}
 }
 
-VERSION=""
-
-## get the correct version
-if [[ "${1}" == "v*" ]]; then
-    VERSION="${1}"
-else
-    VERSION="v${1}"
-fi
+VERSION="v"
 
 ######################
 
@@ -47,7 +40,7 @@ x git add CHANGELOG.md .changelogs
 x git commit -m "Generate CHANGELOG.md for ${VERSION}"
 
 ## 3) Bump plugin version
-x sed -i "s;^version:;version: \"${VERSION}\"" plugin.yaml
+x sed -i "s;^version:;version: \"(echo -n ${VERSION} | tr -d 'v')\"" plugin.yaml
 x git add plugin.yaml
 x git commit -m "Bump plugin version to ${VERSION}"
 
