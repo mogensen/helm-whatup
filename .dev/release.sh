@@ -20,39 +20,35 @@
 
 set -o nounset                              # Treat unset variables as an error
 set -e  # exit/ stop on error
+set -x
 
-x() {
-    echo "+ ${@}"
-    ${@}
-}
-
-VERSION="v"
+VERSION="${1}"
 
 ######################
 
 ## 1) Create branch
-x git checkout develop
-x git checkout -b "release/${VERSION}"
+git checkout develop
+git checkout -b "release/${VERSION}"
 
 ## 2) Generate CHANGELOG.md
-x changelog release "${VERSION}"
-x git add CHANGELOG.md .changelogs
-x git commit -m "Generate CHANGELOG.md for ${VERSION}"
+changelog release "${VERSION}"
+git add CHANGELOG.md .changelogs
+git commit -m "Generate CHANGELOG.md for ${VERSION}"
 
 ## 3) Bump plugin version
-x sed -i "s;^version:;version: \"(echo -n ${VERSION} | tr -d 'v')\"" plugin.yaml
-x git add plugin.yaml
-x git commit -m "Bump plugin version to ${VERSION}"
+sed -i "s;^version:.*;version: \"$(echo -n ${VERSION} | tr -d 'v')\";g" plugin.yaml
+git add plugin.yaml
+git commit -m "Bump plugin version to ${VERSION}"
 
 ## 4) Create tag and merge
-x git tag -a -s "${VERSION}" -m "${VERSION}"
-x git checkout master
-x git merge --no-ff "release/${VERSION}"
-x git branch --delete "release/${VERSION}"
+git tag -a -s "${VERSION}" -m "${VERSION}"
+git checkout master
+git merge --no-ff "release/${VERSION}"
+git branch --delete "release/${VERSION}"
 
 ## 5) Push and clean up env
-x git push
-x git checkout develop
-x git rebase master
-x git push
-x git push --tag
+git push
+git checkout develop
+git rebase master
+git push
+git push --tag
