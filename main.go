@@ -88,6 +88,11 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 			return initializeViper(cmd)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// check for special flags such as '--version' where the application should exit after printing the information
+			if checkSpecFlags() {
+				return nil
+			}
+
 			if client.AllNamespaces {
 				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
 					return err
@@ -131,6 +136,19 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	bindOutputFlag(cmd, &outfmt)
 
 	return cmd
+}
+
+// checkSpecFlags will check if a special flag was set where the application
+// is not indented to work; it should only print some information.
+//
+// It will return 'true' if such a flag was detected.
+func checkSpecFlags() bool {
+	if showVersion {
+		printVersion()
+		return true
+	}
+
+	return false
 }
 
 // initializeViper initializes the viper (flag environment variable binding)
@@ -535,4 +553,10 @@ func (o *outputValue) Set(s string) error {
 	}
 	*o = outputValue(outfmt)
 	return nil
+}
+
+// printVersion will print version information about this plugin.
+func printVersion() {
+	fmt.Printf("Plugin version.............: %s\n", Version)
+	fmt.Printf("helm.sh/helm/v3 pkg version: %s\n", HelmVersion)
 }

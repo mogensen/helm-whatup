@@ -1,9 +1,12 @@
 HELM_HOME ?= $(shell helm home)
 HELM_PLUGIN_DIR ?= $(HELM_HOME)/plugins/helm-whatup
+HELM_VERSION := $(shell grep "helm.sh/helm/v3" go.mod | sed -n -e "s/.*helm\.sh\/helm\/v3 \(v[.0-9]*\).*/\1/p")
 VERSION := $(shell sed -n -e 's/version:[ "]*\([^"]*\).*/\1/p' plugin.yaml)
 GIT_COMMIT := $(shell git rev-list -1 HEAD)
 DIST := $(CURDIR)/_dist
-LDFLAGS := "-X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT} -extldflags '-static'"
+
+LDFLAGS := -X main.Version=v$(VERSION) -extldflags '-static'
+LDFLAGS += -X main.HelmVersion=$(HELM_VERSION)
 
 .PHONY: helmrel
 helmrel:
@@ -30,14 +33,14 @@ cov: build
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
+	CGO_ENABLED=0 go build -o bin/helm-whatup -ldflags "$(LDFLAGS)" .
 
 .PHONY: dist
 dist:
 	mkdir -p $(DIST)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/helm-whatup -ldflags "$(LDFLAGS)" .
 	tar -zcvf $(DIST)/helm-whatup-$(VERSION)-linux-amd64.tar.gz bin/helm-whatup README.md LICENSE.md plugin.yaml
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o bin/helm-whatup -ldflags "$(LDFLAGS)" .
 	tar -zcvf $(DIST)/helm-whatup-$(VERSION)-darwin-amd64.tar.gz bin/helm-whatup README.md LICENSE.md plugin.yaml
 
 
