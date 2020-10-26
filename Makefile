@@ -48,3 +48,8 @@ dist:
 bootstrap:
 	go mod download
 	go get -u github.com/dave/courtney
+
+.PHONY: dev
+dev: build
+	helm plugin remove whatup || true
+	SKIP_BIN_INSTALL=1 helm plugin install $(GOPATH)/src/github.com/fabmation-gmbh/helm-whatup
