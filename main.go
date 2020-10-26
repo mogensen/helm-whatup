@@ -194,8 +194,8 @@ type repoDuplicate struct {
 }
 
 type outdatedListWriter struct {
-	releases       []outdatedElement // Outdated releases
-	repoDuplicates []repoDuplicate
+	Releases       []outdatedElement `json:"releases" yaml:"releases"`
+	RepoDuplicates []repoDuplicate   `json:"repo_duplicates" yaml:"repo_duplicates"`
 }
 
 type searchType uint8
@@ -273,8 +273,8 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	}
 
 	return &outdatedListWriter{
-		releases:       outdated,
-		repoDuplicates: dups,
+		Releases:       outdated,
+		RepoDuplicates: dups,
 	}
 }
 
@@ -401,7 +401,7 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 	table := uitable.New()
 
 	table.AddRow("NAME", "NAMESPACE", "INSTALLED VERSION", "LATEST VERSION", "CHART")
-	for _, r := range r.releases {
+	for _, r := range r.Releases {
 		table.AddRow(r.Name, r.Namespace, r.InstalledVer, r.LatestVer, r.Chart)
 	}
 
@@ -412,14 +412,14 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 		return err
 	}
 
-	if len(r.repoDuplicates) == 0 {
+	if len(r.RepoDuplicates) == 0 {
 		return nil
 	}
 
 	// print detailed information about "duplicated" repos
 	fmt.Fprintf(out, "\n\n")
 
-	for _, dc := range r.repoDuplicates {
+	for _, dc := range r.RepoDuplicates {
 		fmt.Fprintln(out, "----")
 
 		// first print basic information about current deployment
@@ -447,11 +447,11 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 }
 
 func (r *outdatedListWriter) WriteJSON(out io.Writer) error {
-	return output.EncodeJSON(out, r.releases)
+	return output.EncodeJSON(out, r)
 }
 
 func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
-	return output.EncodeYAML(out, r.releases)
+	return output.EncodeYAML(out, r)
 }
 
 /// ===== Internal required Functions ====== ///

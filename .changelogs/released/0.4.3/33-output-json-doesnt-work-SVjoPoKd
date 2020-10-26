@@ -1,0 +1,2 @@
+title: Fix JSON/YAML output when multiple repositories do provide the chart ([#33](https://github.com/fabmation-gmbh/helm-whatup/issues/33))
+type: 1
