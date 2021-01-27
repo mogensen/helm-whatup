@@ -54,17 +54,26 @@ func main() {
 		log.Fatalf("Error while initializing actionConfig: %s", err.Error())
 	}
 
+	// check if we should enable BETA features
+	enableBetaFeatures, err = strconv.ParseBool(os.Getenv("HELM_WHATUP_BETA_FEATURES"))
+	if err != nil {
+		log.Fatalf("Invalid value in 'HELM_WHATUP_BETA_FEATURES': %s", err.Error())
+	}
+
 	rootCmd := newOutdatedCmd(actionConfig, os.Stdout)
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("There was an error while executing the Command: %s", err.Error())
 	}
 }
 
-var outdatedHelp = `
-This Command lists all releases which are outdated.
+var outdatedHelp = `This Command lists all releases which are outdated.
 
 By default, the output is printed in a Table but you can change this behavior
 with the '--output' Flag.
+
+
+You can enable all BETA features by executing:
+	export HELM_WHATUP_BETA_FEATURES=true
 `
 
 var (
@@ -74,6 +83,7 @@ var (
 	gitCommit          string
 	version            string
 	ignoreDeprecations bool // ignoreDeprecations describes if Charts, which are marked as deprecated, shall be ignored.
+	enableBetaFeatures bool // enableBetaFeatures describes if all beta features should be enabled by default.
 )
 
 // printWarnings prints Warning if specific flags have been set.
