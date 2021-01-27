@@ -204,8 +204,9 @@ type outdatedElement struct {
 	LatestVer    string    `json:"latest_version"`
 	AppVer       string    `json:"app_version"` // AppVer does contain the App version defined in 'Chart.yaml'
 	Chart        string    `json:"chart"`
-	Updated      time.Time `json:"updated"`    // Updated contains the last time where the chart in the repository was updated
-	Deprecated   bool      `json:"deprecated"` // Deprecated does contain `deprecated` field from the Chart.yaml file
+	NewestRepo   string    `json:"newest_repo,omitempty"` // NewestRepo contains the name of the repository with the updated Chart.
+	Updated      time.Time `json:"updated"`               // Updated is the date the chart was updated.
+	Deprecated   bool      `json:"deprecated"`            // Deprecated does contain `deprecated` field from the Chart.yaml file
 }
 
 type repoDuplicate struct {
@@ -291,6 +292,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 				InstalledVer: r.Chart.Metadata.Version,
 				LatestVer:    repoResult.chart.Chart.Metadata.Version,
 				Chart:        repoResult.chart.Chart.Name,
+				NewestRepo:   strings.Split(repoResult.chart.Name, "/")[0],
 			})
 		} else {
 			repoResult.repos.Namespace = r.Namespace
@@ -431,9 +433,9 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 	table := uitable.New()
 
-	table.AddRow("NAME", "NAMESPACE", "INSTALLED VERSION", "LATEST VERSION", "CHART")
+	table.AddRow("NAME", "NAMESPACE", "INSTALLED VERSION", "LATEST VERSION", "CHART", "REPOSITORY")
 	for _, r := range r.Releases {
-		table.AddRow(r.Name, r.Namespace, r.InstalledVer, r.LatestVer, r.Chart)
+		table.AddRow(r.Name, r.Namespace, r.InstalledVer, r.LatestVer, r.Chart, r.NewestRepo)
 	}
 
 	// write basic table and then add additional information if we found multiple repositories which do serve one (or more)
