@@ -18,10 +18,13 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
@@ -419,8 +422,13 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 	// print detailed information about "duplicated" repos
 	fmt.Fprintf(out, "\n\n")
 
+	// sepLen is the number of the seperator characters.
+	// It does represent the terminal/tty width OR defaults to 90
+	sepLen := int(terminalWidth())
+	sep := genStr("-", sepLen)
+
 	for _, dc := range r.RepoDuplicates {
-		fmt.Fprintln(out, "----")
+		fmt.Fprintf(out, "\n%s\n", sep)
 
 		// first print basic information about current deployment
 		fmt.Fprintf(out, "%-24s%s\n", "NAME", dc.Name)
@@ -442,7 +450,6 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 		}
 	}
 
-	_, err = fmt.Fprintln(out, "----")
 	return err
 }
 
@@ -452,6 +459,73 @@ func (r *outdatedListWriter) WriteJSON(out io.Writer) error {
 
 func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
 	return output.EncodeYAML(out, r)
+}
+
+// terminalWidth returns the width of the current terminal OR 90 if the width could not be determined.
+//
+// Source: https://github.com/wayneashleyberry/terminal-dimensions/blob/c5d4738bc7c94ffd4c9b0ff4c248ce3aca664df5/terminaldimensions.go
+func terminalWidth() uint {
+	const defaultWidth = 90
+
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	out, err := cmd.Output()
+	if err != nil {
+		return defaultWidth
+	}
+
+	_, width, err := parseTerminalWidth(bytes2string(out))
+	if err != nil {
+		return defaultWidth
+	}
+
+	return width
+}
+
+// parseTerminalWidth parses the output of `stty size` and returns Height and Width.
+//
+// Source: https://github.com/wayneashleyberry/terminal-dimensions/blob/c5d4738bc7c94ffd4c9b0ff4c248ce3aca664df5/terminaldimensions.go
+func parseTerminalWidth(input string) (uint, uint, error) {
+	parts := strings.Split(input, " ")
+	x, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	y, err := strconv.Atoi(strings.Replace(parts[1], "\n", "", 1))
+	if err != nil {
+		return 0, 0, err
+	}
+	return uint(x), uint(y), nil
+}
+
+// genStr appends s n times and returns the result.
+func genStr(s string, n int) string {
+	var res string
+
+	for i := 0; i < n; i++ {
+		res += s
+	}
+
+	return res
+}
+
+// string2bytes converts the given string to a byte slice without memory allocation.
+//
+// Note it may break if string and/or slice header will change in future go versions.
+func string2bytes(s string) (b []byte) {
+	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	sh := *(*reflect.StringHeader)(unsafe.Pointer(&s))
+	bh.Data = sh.Data
+	bh.Len = sh.Len
+	bh.Cap = sh.Len
+
+	return b
+}
+
+func bytes2string(bytes []byte) string {
+	sliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
+	stringHeader := reflect.StringHeader{Data: sliceHeader.Data, Len: sliceHeader.Len}
+	return *(*string)(unsafe.Pointer(&stringHeader))
 }
 
 /// ===== Internal required Functions ====== ///

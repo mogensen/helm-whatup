@@ -13,6 +13,10 @@ require (
 	github.com/spf13/cobra v1.0.0
 	github.com/tidwall/gjson v1.3.5
 	github.com/tidwall/sjson v1.0.4
+	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9 // indirect
+	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	helm.sh/helm/v3 v3.2.2
 	k8s.io/client-go v0.18.0
 	rsc.io/letsencrypt v0.0.3 // indirect
