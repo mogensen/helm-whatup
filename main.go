@@ -461,9 +461,10 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 		fmt.Fprintf(out, "\n%s\n", sep)
 
 		// first print basic information about current deployment
-		fmt.Fprintf(out, "%-24s%s\n", "NAME", dc.Name)
-		fmt.Fprintf(out, "%-24s%s\n", "NAMESPACE", dc.Namespace)
-		fmt.Fprintf(out, "%-24s%s\n\n", "INSTALLED VERSION", dc.Repos[0].InstalledVer)
+		fmt.Fprintf(out, "%-27s%s\n", "NAME", dc.Name)
+		fmt.Fprintf(out, "%-27s%s\n", "NAMESPACE", dc.Namespace)
+		fmt.Fprintf(out, "%-27s%s\n", "INSTALLED CHART VERSION", dc.Repos[0].InstalledVer)
+		fmt.Fprintf(out, "%-27s%s\n\n", "INSTALLED APP VERSION", dc.Repos[0].AppVer)
 		// fmt.Fprintf(out, "%24s%s\n", "LATEST APP VERSION", dc.Repos[0].AppVer) // TODO(l0nax): Implement me
 
 		// print repository table
