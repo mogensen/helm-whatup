@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 
+## 0.5.0 (2021-01-27)
+
+### Added (5 changes)
+- Add '--ignore-deprecation' flag to allow ignoring Charts marked as "deprecated" ([#35](https://github.com/fabmation-gmbh/helm-whatup/issues/35))
+- Add 'HELM_WHATUP_BETA_FEATURES' environment variable to toggle beta features in this plugin
+- Add new row/field 'REPOSITORY' to output to show the name of the Chart repository containing the newer version.
+- Colorize source repository in multi-repository table view ([#37](https://github.com/fabmation-gmbh/helm-whatup/issues/37))
+- Print 'installed app version' in _table view_ when multiple repositories are providing the chart ([#36](https://github.com/fabmation-gmbh/helm-whatup/issues/36); [#36 (comment 768345618)](https://github.com/fabmation-gmbh/helm-whatup/issues/36\#issuecomment-768345618))
+
+### Changed (1 change)
+- Print seperator in 'table' output mode by the length of the current terminal ([#37](https://github.com/fabmation-gmbh/helm-whatup/issues/37))
+
+### Other (2 changes)
+- Fix typo in help page ([#37](https://github.com/fabmation-gmbh/helm-whatup/issues/37))
+- Use '/bin/sh' instead of '/bin/bash' in the install script ([#34](https://github.com/fabmation-gmbh/helm-whatup/issues/34))
+
+
 ## 0.4.3 (2020-10-26)
 
 ### Fixed (1 change)
