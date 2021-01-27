@@ -30,6 +30,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gosuri/uitable"
+	"github.com/mgutz/ansi"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -43,7 +44,12 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
+// repoHighlightColor is the highlighting color for the repository, in the "multiple-repositories-view", from which the release
+// has been installed from.
+var repoHighlightColor = ansi.Green
+
 var settings = cli.New()
+var index *search.Index
 
 func main() {
 	// get action config first
@@ -55,7 +61,12 @@ func main() {
 	}
 
 	// check if we should enable BETA features
-	enableBetaFeatures, err = strconv.ParseBool(os.Getenv("HELM_WHATUP_BETA_FEATURES"))
+	b := os.Getenv("HELM_WHATUP_BETA_FEATURES")
+	if b == "" {
+		b = "false"
+	}
+
+	enableBetaFeatures, err = strconv.ParseBool(b)
 	if err != nil {
 		log.Fatalf("Invalid value in 'HELM_WHATUP_BETA_FEATURES': %s", err.Error())
 	}
@@ -84,6 +95,8 @@ var (
 	version            string
 	ignoreDeprecations bool // ignoreDeprecations describes if Charts, which are marked as deprecated, shall be ignored.
 	enableBetaFeatures bool // enableBetaFeatures describes if all beta features should be enabled by default.
+	// colorizeInstalledChart indicates that the repository should be colorized from where the chart has been installed.
+	colorizeInstalledChart bool
 )
 
 // printWarnings prints Warning if specific flags have been set.
@@ -146,6 +159,9 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
+
+	flags.BoolVar(&colorizeInstalledChart, "color", enableBetaFeatures, "[BETA] colorize/highlight the repositories from where the chart has been installed")
+
 	flags.BoolVar(&ignoreDeprecations, "ignore-deprecation", true, "ignore/skip charts which are marked as \"DEPRECATED\"")
 	flags.BoolVar(&ignoreNoRepo, "ignore-repo", true, "ignore error if no repo for a chart is found")
 	flags.Bool("devel", false, "use development versions (alpha, beta, and release candidate releases), too. Equivalent to version '>0.0.0-0'.")
@@ -222,7 +238,10 @@ type outdatedElement struct {
 type repoDuplicate struct {
 	Name      string            `json:"deploy_name"` // Name contains the deployment name
 	Namespace string            `json:"namespace"`   // Namespace contains the deployment namespace
-	Repos     []outdatedElement `json:"repos"`       // Repos does contain all the repositories which do serve this chart
+	Repos     []outdatedElement `json:"repos"`       // Repos contains all the repositories which do serve this chart
+	// indexSrcRepo contains the position of the repository where the release (chart) has been installed from.
+	// -1 indicates that no repo has been found from where the release chart has been downloaded.
+	indexSrcRepo int `json:"index_src_repo"`
 }
 
 type outdatedListWriter struct {
@@ -246,13 +265,15 @@ type searchResult struct {
 }
 
 func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuration, out io.Writer, devel bool) *outdatedListWriter {
+	var err error
+
 	outdated := make([]outdatedElement, 0, len(releases))
 	dups := make([]repoDuplicate, 0, len(releases))
 
 	// we initialize the Struct with default Options but the 'devel' option can be set by the User, all the other ones are not
 	// relevant.
 	searchRepo := searchRepoOptions{
-		versions:     false,
+		versions:     true,
 		regexp:       false,
 		devel:        devel,
 		maxColWidth:  50,
@@ -262,7 +283,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	}
 
 	// initialize Repo index first
-	index, err := initSearch(out, &searchRepo)
+	index, err = initSearch(out, &searchRepo)
 	if err != nil {
 		// TODO: Find a better way to exit
 		fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
@@ -334,12 +355,21 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (searchResult, bool, error) {
 	ret := searchResult{}
 
+	// trackedRepos keeps information about a repository we already tracked.
+	type trackedRepos struct {
+		version *semver.Version
+		result  **search.Result // result is a reference to the data stored in chartRepos
+	}
+
 	// since we have now to check also if a repository contains an
 	// deprecated chart we need an "point" where to look if we have found
 	// a newer chart version
 	foundNewer := false
 	found := false                  // found describes if Charts where found but no one is newer than the actual one
 	var chartRepos []*search.Result // chartRepos contains all repositories which contains the searched chart
+
+	// repo tracks all chart repositories by its name, as key.
+	repo := make(map[string]trackedRepos, len(r))
 
 	// prepare the constrain string so we do not have the re-calculate it every time
 	constrainStr := "> " + chartVersion
@@ -349,7 +379,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	// TODO: implement a better search algorithm. Because this is an linear search algorithm so it takes O(len(r)) steps in the
 	// worst case
-	for _, result := range r {
+	for i, result := range r {
 		// check if the Chart-Result Name is that one we are searching for.
 		if !strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
 			continue
@@ -376,6 +406,32 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		if constrain.Check(version) {
 			debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, chartVersion)
 			foundNewer = true
+
+			ver, ok := repo[result.Name]
+			if !ok {
+				// first time we track this repository
+				chartRepos = append(chartRepos, result)
+
+				resultVersion, err := semver.NewVersion(result.Chart.Version)
+				if err != nil {
+					return ret, false, err
+				}
+
+				repo[result.Name] = trackedRepos{
+					version: resultVersion,
+					result:  &(r[i]), // store the address of the element, so we can change it later
+				}
+			}
+
+			// we already tracked a chart (version) from this repository so we have to change it
+			if ok && ver.version.LessThan(version) {
+				// change the tracked repository (*result) in the `chartRepos` array
+				// ==> track only the newest version
+				**ver.result = *result
+
+				ver.version = version
+				repo[result.Name] = ver
+			}
 		}
 
 		// // TODO(l0nax): refactor me ==> @duplicate append MUST be moved out of this if-block! */
@@ -385,8 +441,6 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		//     // would not know it – later – that this Repo is deperecated.
 		//     chartRepos = append(chartRepos, result)
 		// }
-
-		chartRepos = append(chartRepos, result)
 
 		// set 'found' to true because a Repository contains the Chart but the Version is not newer than the installed one.
 		found = true
@@ -416,8 +470,14 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 		ret.Type = REPOS
 		ret.repos = repoDuplicate{
-			Name:  name,
-			Repos: repos,
+			Name:         name,
+			Repos:        repos,
+			indexSrcRepo: -1,
+		}
+
+		if colorizeInstalledChart {
+			// search the repository from where the release chart has been downloaded
+			searchSrcRepo(&ret.repos)
 		}
 
 		return ret, true, nil
@@ -438,6 +498,56 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	debug("No newer Chart was found for '%s'", name)
 	return ret, false, nil
+}
+
+// searchSrcRepo searches in rs the repository from where the release chart has been downloaded.
+// The index/position of the repoDuplicate.Repos array where the source repository resides
+// will be stored in repoDuplicate.indexSrcRepo.
+func searchSrcRepo(rd *repoDuplicate) {
+	// NOTE: r.Chart does contain the FULL chart path, i.e. <REPOSITORY>/<CHART>
+
+	for i, r := range rd.Repos {
+		rs, err := index.Search(r.Name, 50, false)
+		if err != nil {
+			log.Fatalf("An error occurred while searching for the source repository: %#+v\n", err)
+		}
+
+		// we need to know all previous versions of this chart
+		v, err := getAllVersions(&r, rs)
+		if err != nil {
+			log.Fatalf("An error occurred while searching for the source repository: %#+v\n", err)
+		}
+
+		// check if this repo does have the EXACT same Chart-Version <=> App-Version
+		app, ok := v[r.LatestVer]
+		if ok && app == r.AppVer {
+			// we may be have found the repository which has been used to install this chart
+			rd.indexSrcRepo = i
+
+			return
+		}
+	}
+}
+
+// getAllVersions returns all chart and app versions of r.
+//
+// The returned map is structured as follows:
+//	- key..: Chart version
+//	- value: App version
+//
+// If an error occurs, it will be returned.
+func getAllVersions(r *outdatedElement, rs []*search.Result) (map[string]string, error) {
+	ver := make(map[string]string, 50)
+
+	for _, res := range rs {
+		if res.Chart.Name != r.Name {
+			continue
+		}
+
+		ver[res.Chart.Version] = res.Chart.AppVersion
+	}
+
+	return ver, nil
 }
 
 func (r *outdatedListWriter) WriteTable(out io.Writer) error {
@@ -475,14 +585,20 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 		fmt.Fprintf(out, "%-27s%s\n", "NAMESPACE", dc.Namespace)
 		fmt.Fprintf(out, "%-27s%s\n", "INSTALLED CHART VERSION", dc.Repos[0].InstalledVer)
 		fmt.Fprintf(out, "%-27s%s\n\n", "INSTALLED APP VERSION", dc.Repos[0].AppVer)
-		// fmt.Fprintf(out, "%24s%s\n", "LATEST APP VERSION", dc.Repos[0].AppVer) // TODO(l0nax): Implement me
 
 		// print repository table
 		table = uitable.New()
 
 		table.AddRow("REPOSITORY", "DEPRECATED", "CHART VERSION", "APP VERSION", "UPDATED")
-		for _, r := range dc.Repos {
-			table.AddRow(strings.Split(r.Chart, "/")[0], r.Deprecated, r.LatestVer, r.AppVer, r.Updated.UTC().String())
+		for iRepo, r := range dc.Repos {
+			repo := strings.Split(r.Chart, "/")[0]
+
+			// highlight the repo if it's the source repo
+			if colorizeInstalledChart && iRepo == dc.indexSrcRepo {
+				repo = repoHighlightColor + repo + ansi.Reset
+			}
+
+			table.AddRow(repo, r.Deprecated, r.LatestVer, r.AppVer, r.Updated.UTC().String())
 		}
 
 		err := output.EncodeTable(out, table)
@@ -630,18 +746,21 @@ func (o *searchRepoOptions) buildIndex(out io.Writer) (*search.Index, error) {
 	}
 
 	i := search.NewIndex()
+
 	for _, re := range rf.Repositories {
 		n := re.Name
 		f := filepath.Join(o.repoCacheDir, helmpath.CacheIndexFile(n))
+
 		ind, err := repo.LoadIndexFile(f)
 		if err != nil {
-			// TODO should print to stderr
+			// TODO: should print to stderr
 			fmt.Fprintf(out, "WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
 			continue
 		}
 
 		i.AddRepo(n, ind, o.versions || len(o.version) > 0)
 	}
+
 	return i, nil
 }
 
