@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Combination of the Glide and Helm scripts, with my own tweaks.
 
