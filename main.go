@@ -78,7 +78,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	var outfmt output.Format
 
 	cmd := &cobra.Command{
-		Use:     "outdated",
+		Use:     "whatup",
 		Short:   "list outdated releases",
 		Long:    outdatedHelp,
 		Aliases: []string{"od"},
