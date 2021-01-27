@@ -1,0 +1,2 @@
+title: Use '/bin/sh' instead of '/bin/bash' in the install script ([#34](https://github.com/fabmation-gmbh/helm-whatup/issues/34))
+type: 6
