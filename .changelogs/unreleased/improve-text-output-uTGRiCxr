@@ -1,0 +1,2 @@
+title: Add '--ignore-deprecation' flag to allow ignoring Charts marked as "deprecated" ([#35](https://github.com/fabmation-gmbh/helm-whatup/issues/35))
+type: 0
