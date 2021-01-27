@@ -71,10 +71,25 @@ var (
 	ignoreNoRepo bool = false
 	showVersion  bool = false
 
-	gitCommit       string
-	version         string
-	deprecationInfo bool // deprecationInfo describes if the "DEPRECTATION" notice will be printed or not
+	gitCommit          string
+	version            string
+	ignoreDeprecations bool // ignoreDeprecations describes if Charts, which are marked as deprecated, shall be ignored.
 )
+
+// printWarnings prints Warning if specific flags have been set.
+func printWarnings(out io.Writer) {
+	printed := false
+
+	// warn the user that deprecated charts will be excluded
+	if ignoreDeprecations {
+		printed = true
+		fmt.Fprintln(out, "WARNING: Charts marked as deprecated will not be shown in the results.")
+	}
+
+	if printed {
+		fmt.Fprintf(out, "\n\n")
+	}
+}
 
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	client := action.NewList(cfg)
@@ -95,6 +110,9 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 			if checkSpecFlags() {
 				return nil
 			}
+
+			// print warnings for special flags
+			printWarnings(out)
 
 			if client.AllNamespaces {
 				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
@@ -118,7 +136,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.BoolVar(&deprecationInfo, "deprecation-notice", true, "disable it to prevent printing the deprecation notice message")
+	flags.BoolVar(&ignoreDeprecations, "ignore-deprecation", true, "ignore/skip charts which are marked as \"DEPRECATED\"")
 	flags.BoolVar(&ignoreNoRepo, "ignore-repo", true, "ignore error if no repo for a chart is found")
 	flags.Bool("devel", false, "use development versions (alpha, beta, and release candidate releases), too. Equivalent to version '>0.0.0-0'.")
 	flags.BoolVarP(&client.Short, "short", "q", false, "output short (quiet) listing format")
@@ -251,7 +269,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
 				os.Exit(1)
 			} else {
-				fmt.Fprintf(out, "WARNING: No Repo was found which containing the Chart '%s' (skipping)\n", r.Chart.Name())
+				fmt.Fprintf(out, "WARNING: No Repo was found which contains the Chart '%s' (skipping)\n", r.Chart.Name())
 				continue
 			}
 		}
@@ -262,6 +280,11 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		}
 
 		if repoResult.Type == CHART {
+			// skip if `ignore-deprecated` flag is true and the chart is deprecated
+			if ignoreDeprecations && repoResult.chart.Chart.Deprecated {
+				continue
+			}
+
 			outdated = append(outdated, outdatedElement{
 				Name:         r.Name,
 				Namespace:    r.Namespace,
@@ -317,6 +340,11 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 	for _, result := range r {
 		// check if the Chart-Result Name is that one we are searching for.
 		if !strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
+			continue
+		}
+
+		// skip if chart is deprecated and 'ignore-deprecations' is enabled
+		if ignoreDeprecations && result.Chart.Deprecated {
 			continue
 		}
 
@@ -383,7 +411,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		return ret, true, nil
 	}
 
-	if deprecationInfo && foundNewer {
+	if foundNewer {
 		ret.Type = CHART
 		ret.chart = chartRepos[0]
 
