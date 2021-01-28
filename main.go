@@ -357,8 +357,9 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	// trackedRepos keeps information about a repository we already tracked.
 	type trackedRepos struct {
-		version *semver.Version
-		result  **search.Result // result is a reference to the data stored in chartRepos
+		version    *semver.Version
+		result     **search.Result // result is a reference to the data stored in chartRepos
+		deprecated bool            // deprecated is true if the version of the chart is marked as deprecated.
 	}
 
 	// since we have now to check also if a repository contains an
@@ -387,6 +388,12 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 		// skip if chart is deprecated and 'ignore-deprecations' is enabled
 		if ignoreDeprecations && result.Chart.Deprecated {
+			if v, ok := repo[result.Name]; ok {
+				// mark the tracked chart as deprecated so we can skip it later.
+				v.deprecated = true
+				repo[result.Name] = v
+			}
+
 			continue
 		}
 
@@ -453,10 +460,20 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	// check if we have multiple repositories which do serve the chart
 	if len(chartRepos) > 1 {
-		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), name)
+		// NOTE: there is a special case when multiple repositories do serve this chart
+		//       but one or more marked the chart as "deprecated", i.e. as done with all charts in the "stable" repository.
 		repos := []outdatedElement{}
 
 		for _, c := range chartRepos {
+			if ignoreDeprecations {
+				// the repo is tracked if not then we have BUG.
+				if v := repo[c.Name]; v.deprecated {
+					// chart has been marked as deprecated and user
+					// don't wants to see deprecated charts => skip it
+					continue
+				}
+			}
+
 			repos = append(repos, outdatedElement{
 				Name:         name,
 				InstalledVer: chartVersion,
@@ -467,6 +484,14 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 				Deprecated:   c.Chart.Deprecated,
 			})
 		}
+
+		// as described in the first NOTE: it could be that multiple repos serve the chart but they marked it as deprecated.
+		// In this case we may have only ONE repository left serving the chart.
+		if len(repos) == 1 {
+			goto oneRepo
+		}
+
+		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), name)
 
 		ret.Type = REPOS
 		ret.repos = repoDuplicate{
@@ -483,6 +508,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		return ret, true, nil
 	}
 
+oneRepo:
 	if foundNewer {
 		ret.Type = CHART
 		ret.chart = chartRepos[0]
