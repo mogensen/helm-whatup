@@ -554,8 +554,8 @@ func searchSrcRepo(rd *repoDuplicate) {
 		}
 
 		// check if this repo does have the EXACT same Chart-Version <=> App-Version
-		app, ok := v[r.LatestVer]
-		if ok && app == r.AppVer {
+		app, ok := v[rd.InstalledChartVersion]
+		if ok && app == rd.InstalledAppVersion {
 			// we may be have found the repository which has been used to install this chart
 			rd.IndexSrcRepo = i
 
