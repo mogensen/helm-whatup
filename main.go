@@ -542,7 +542,7 @@ func searchSrcRepo(rd *repoDuplicate) {
 	// NOTE: r.Chart does contain the FULL chart path, i.e. <REPOSITORY>/<CHART>
 
 	for i, r := range rd.Repos {
-		rs, err := index.Search(r.Name, 50, false)
+		rs, err := index.Search(r.Chart, 50, false)
 		if err != nil {
 			log.Fatalf("An error occurred while searching for the source repository: %#+v\n", err)
 		}
@@ -575,7 +575,7 @@ func getAllVersions(r *outdatedElement, rs []*search.Result) (map[string]string,
 	ver := make(map[string]string, 50)
 
 	for _, res := range rs {
-		if res.Chart.Name != r.Name {
+		if res.Name != r.Chart {
 			continue
 		}
 
