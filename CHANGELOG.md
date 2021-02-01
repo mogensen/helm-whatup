@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 
+## 0.5.2 (2021-02-01)
+
+### Fixed (1 change)
+- Fix showing incorrect App Version in multi-repo table view
+
+
 ## 0.5.1 (2021-02-01)
 
 ### Changed (1 change)
