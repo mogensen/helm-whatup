@@ -241,9 +241,11 @@ type outdatedElement struct {
 }
 
 type repoDuplicate struct {
-	Name      string            `json:"deploy_name"` // Name contains the deployment name
-	Namespace string            `json:"namespace"`   // Namespace contains the deployment namespace
-	Repos     []outdatedElement `json:"repos"`       // Repos contains all the repositories which do serve this chart
+	Name                  string            `json:"deploy_name"` // Name contains the deployment name
+	Namespace             string            `json:"namespace"`   // Namespace contains the deployment namespace
+	InstalledChartVersion string            `json:"installed_chart_version"`
+	InstalledAppVersion   string            `json:"installed_app_version"`
+	Repos                 []outdatedElement `json:"repos"` // Repos contains all the repositories which do serve this chart
 	// IndexSrcRepo contains the position of the repository where the release (chart) has been installed from.
 	// -1 indicates that no repo has been found from where the release chart has been downloaded.
 	IndexSrcRepo int `json:"index_src_repo"`
@@ -300,7 +302,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 
 	for _, r := range releases {
 		// search if it exists a newer Chart in the Chart-Repository
-		repoResult, dep, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
+		repoResult, dep, err := searchChart(results, r, devel)
 		if err != nil {
 			if !ignoreNoRepo {
 				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
@@ -357,7 +359,7 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 // It will return a struct with all search information.
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
-func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (searchResult, bool, error) {
+func searchChart(r []*search.Result, release *release.Release, devel bool) (searchResult, bool, error) {
 	ret := searchResult{}
 
 	// trackedRepos keeps information about a repository we already tracked.
@@ -378,16 +380,16 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 	repo := make(map[string]trackedRepos, len(r))
 
 	// prepare the constrain string so we do not have the re-calculate it every time
-	constrainStr := "> " + chartVersion
+	constrainStr := "> " + release.Chart.Metadata.Version
 	if devel {
-		constrainStr += "-0" + " != " + chartVersion
+		constrainStr += "-0" + " != " + release.Chart.Metadata.Version
 	}
 
 	// TODO: implement a better search algorithm. Because this is an linear search algorithm so it takes O(len(r)) steps in the
 	// worst case
 	for i, result := range r {
 		// check if the Chart-Result Name is that one we are searching for.
-		if !strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
+		if !strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(release.Chart.Name())) {
 			continue
 		}
 
@@ -414,9 +416,9 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		}
 
 		debug("Comparing version of original chart '%s' => %s with version (%s) %s [constrain: '%s']",
-			name, chartVersion, result.Name, result.Chart.Metadata.Version, constrainStr)
+			release.Chart.Name(), release.Chart.Metadata.Version, result.Name, result.Chart.Metadata.Version, constrainStr)
 		if constrain.Check(version) {
-			debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, chartVersion)
+			debug("Found newer version '%s' %s > %s", result.Name, result.Chart.Metadata.Version, result.Chart.Metadata.Version)
 			foundNewer = true
 
 			ver, ok := repo[result.Name]
@@ -459,8 +461,8 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 	}
 
 	if !found {
-		debug("Could not find any Repo which contains %s", name)
-		return ret, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
+		debug("Could not find any Repo which contains %s", release.Chart.Name())
+		return ret, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", release.Chart.Name()))
 	}
 
 	// check if we have multiple repositories which do serve the chart
@@ -480,8 +482,8 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			}
 
 			repos = append(repos, outdatedElement{
-				Name:         name,
-				InstalledVer: chartVersion,
+				Name:         release.Chart.Name(),
+				InstalledVer: release.Chart.Metadata.Version,
 				AppVer:       c.Chart.Metadata.AppVersion,
 				LatestVer:    c.Chart.Metadata.Version,
 				Chart:        c.Name,
@@ -496,13 +498,15 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			goto oneRepo
 		}
 
-		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), name)
+		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), release.Chart.Name())
 
 		ret.Type = REPOS
 		ret.repos = repoDuplicate{
-			Name:         name,
-			Repos:        repos,
-			IndexSrcRepo: -1,
+			Name:                  release.Chart.Name(),
+			Repos:                 repos,
+			IndexSrcRepo:          -1,
+			InstalledAppVersion:   release.Chart.AppVersion(),
+			InstalledChartVersion: release.Chart.Metadata.Version,
 		}
 
 		if colorizeInstalledChart {
@@ -527,7 +531,7 @@ oneRepo:
 		return ret, true, nil
 	}
 
-	debug("No newer Chart was found for '%s'", name)
+	debug("No newer Chart was found for '%s'", release.Chart.Name())
 	return ret, false, nil
 }
 
@@ -614,8 +618,8 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 		// first print basic information about current deployment
 		fmt.Fprintf(out, "%-27s%s\n", "NAME", dc.Name)
 		fmt.Fprintf(out, "%-27s%s\n", "NAMESPACE", dc.Namespace)
-		fmt.Fprintf(out, "%-27s%s\n", "INSTALLED CHART VERSION", dc.Repos[0].InstalledVer)
-		fmt.Fprintf(out, "%-27s%s\n\n", "INSTALLED APP VERSION", dc.Repos[0].AppVer)
+		fmt.Fprintf(out, "%-27s%s\n", "INSTALLED CHART VERSION", dc.InstalledChartVersion)
+		fmt.Fprintf(out, "%-27s%s\n\n", "INSTALLED APP VERSION", dc.InstalledAppVersion)
 
 		// print repository table
 		table = uitable.New()
