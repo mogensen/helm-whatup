@@ -87,6 +87,11 @@ You can enable all BETA features by executing:
 	export HELM_WHATUP_BETA_FEATURES=true
 `
 
+// warn prints a warning message.
+func warn(str string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, str, a...)
+}
+
 var (
 	ignoreNoRepo bool = false
 	showVersion  bool = false
@@ -106,7 +111,7 @@ func printWarnings(out io.Writer) {
 	// warn the user that deprecated charts will be excluded
 	if ignoreDeprecations {
 		printed = true
-		fmt.Fprintln(out, "WARNING: Charts marked as deprecated will not be shown in the results.")
+		warn("Charts marked as deprecated will not be shown in the results.")
 	}
 
 	if printed {
@@ -239,9 +244,9 @@ type repoDuplicate struct {
 	Name      string            `json:"deploy_name"` // Name contains the deployment name
 	Namespace string            `json:"namespace"`   // Namespace contains the deployment namespace
 	Repos     []outdatedElement `json:"repos"`       // Repos contains all the repositories which do serve this chart
-	// indexSrcRepo contains the position of the repository where the release (chart) has been installed from.
+	// IndexSrcRepo contains the position of the repository where the release (chart) has been installed from.
 	// -1 indicates that no repo has been found from where the release chart has been downloaded.
-	indexSrcRepo int `json:"index_src_repo"`
+	IndexSrcRepo int `json:"index_src_repo"`
 }
 
 type outdatedListWriter struct {
@@ -301,7 +306,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
 				os.Exit(1)
 			} else {
-				fmt.Fprintf(out, "WARNING: No Repo was found which contains the Chart '%s' (skipping)\n", r.Chart.Name())
+				warn("No Repo was found which contains the Chart '%s' (skipping)\n", r.Chart.Name())
 				continue
 			}
 		}
@@ -357,8 +362,9 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	// trackedRepos keeps information about a repository we already tracked.
 	type trackedRepos struct {
-		version *semver.Version
-		result  **search.Result // result is a reference to the data stored in chartRepos
+		version    *semver.Version
+		result     **search.Result // result is a reference to the data stored in chartRepos
+		deprecated bool            // deprecated is true if the version of the chart is marked as deprecated.
 	}
 
 	// since we have now to check also if a repository contains an
@@ -387,6 +393,12 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 		// skip if chart is deprecated and 'ignore-deprecations' is enabled
 		if ignoreDeprecations && result.Chart.Deprecated {
+			if v, ok := repo[result.Name]; ok {
+				// mark the tracked chart as deprecated so we can skip it later.
+				v.deprecated = true
+				repo[result.Name] = v
+			}
+
 			continue
 		}
 
@@ -453,10 +465,20 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	// check if we have multiple repositories which do serve the chart
 	if len(chartRepos) > 1 {
-		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), name)
+		// NOTE: there is a special case when multiple repositories do serve this chart
+		//       but one or more marked the chart as "deprecated", i.e. as done with all charts in the "stable" repository.
 		repos := []outdatedElement{}
 
 		for _, c := range chartRepos {
+			if ignoreDeprecations {
+				// the repo is tracked if not then we have BUG.
+				if v := repo[c.Name]; v.deprecated {
+					// chart has been marked as deprecated and user
+					// don't wants to see deprecated charts => skip it
+					continue
+				}
+			}
+
 			repos = append(repos, outdatedElement{
 				Name:         name,
 				InstalledVer: chartVersion,
@@ -468,11 +490,19 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			})
 		}
 
+		// as described in the first NOTE: it could be that multiple repos serve the chart but they marked it as deprecated.
+		// In this case we may have only ONE repository left serving the chart.
+		if len(repos) == 1 {
+			goto oneRepo
+		}
+
+		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), name)
+
 		ret.Type = REPOS
 		ret.repos = repoDuplicate{
 			Name:         name,
 			Repos:        repos,
-			indexSrcRepo: -1,
+			IndexSrcRepo: -1,
 		}
 
 		if colorizeInstalledChart {
@@ -483,6 +513,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		return ret, true, nil
 	}
 
+oneRepo:
 	if foundNewer {
 		ret.Type = CHART
 		ret.chart = chartRepos[0]
@@ -522,7 +553,7 @@ func searchSrcRepo(rd *repoDuplicate) {
 		app, ok := v[r.LatestVer]
 		if ok && app == r.AppVer {
 			// we may be have found the repository which has been used to install this chart
-			rd.indexSrcRepo = i
+			rd.IndexSrcRepo = i
 
 			return
 		}
@@ -594,7 +625,7 @@ func (r *outdatedListWriter) WriteTable(out io.Writer) error {
 			repo := strings.Split(r.Chart, "/")[0]
 
 			// highlight the repo if it's the source repo
-			if colorizeInstalledChart && iRepo == dc.indexSrcRepo {
+			if colorizeInstalledChart && iRepo == dc.IndexSrcRepo {
 				repo = repoHighlightColor + repo + ansi.Reset
 			}
 
@@ -754,7 +785,7 @@ func (o *searchRepoOptions) buildIndex(out io.Writer) (*search.Index, error) {
 		ind, err := repo.LoadIndexFile(f)
 		if err != nil {
 			// TODO: should print to stderr
-			fmt.Fprintf(out, "WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
+			warn("Repo %q is corrupt or missing. Try 'helm repo update'.", n)
 			continue
 		}
 

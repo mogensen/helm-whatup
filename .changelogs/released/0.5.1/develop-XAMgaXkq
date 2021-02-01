@@ -1,0 +1,2 @@
+title: Fix showing repos serving depreacted charts if `--ignore-deprecation` is set to `true` ([#36 (comment 768978347)](https://github.com/fabmation-gmbh/helm-whatup/issues/36\#issuecomment-768978347))
+type: 1

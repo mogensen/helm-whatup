@@ -7,10 +7,10 @@ PROJECT_GH="fabmation-gmbh/${PROJECT_NAME}"
 
 # set HELM_HOME if it is not set, to the default Value
 if [ -z "${HELM_HOME}" ]; then
-        export HELM_HOME="${HOME}/.helm"
+  export HELM_HOME="${HOME}/.helm"
 fi
 
-if [[ ${SKIP_BIN_INSTALL} == "1" ]]; then
+if [ "${SKIP_BIN_INSTALL}" == "1" ]; then
   echo "Skipping binary install"
   exit
 fi
@@ -90,7 +90,7 @@ installFile() {
 # fail_trap is executed if an error occurs.
 fail_trap() {
   result=$?
-  if [[ "${result}" != "0" ]]; then
+  if [ "${result}" != "0" ]; then
     echo "Failed to install ${PROJECT_NAME}"
     echo -e "\tFor support, go to https://github.com/fabmation-gmbh/helm-whatup."
   fi
