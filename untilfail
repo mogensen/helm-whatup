@@ -1,0 +1,8 @@
+#!/bin/bash
+
+log=$(mktemp)
+
+while "${@}" > ${log} 2>&1; do :; done
+
+cat "${log}"
+rm ${log}

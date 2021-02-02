@@ -47,6 +47,7 @@ import (
 // repoHighlightColor is the highlighting color for the repository, in the "multiple-repositories-view", from which the release
 // has been installed from.
 var repoHighlightColor = ansi.Green
+var deprecatedStrColor = ansi.LightRed
 
 var settings = cli.New()
 var index *search.Index
@@ -89,7 +90,12 @@ You can enable all BETA features by executing:
 
 // warn prints a warning message.
 func warn(str string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, str, a...)
+	s := str
+	if !strings.HasSuffix(str, "\n") {
+		s += "\n"
+	}
+
+	fmt.Fprintf(os.Stderr, "WARNING: "+s, a...)
 }
 
 var (
@@ -374,7 +380,7 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 	// a newer chart version
 	foundNewer := false
 	found := false                  // found describes if Charts where found but no one is newer than the actual one
-	var chartRepos []*search.Result // chartRepos contains all repositories which contains the searched chart
+	var chartRepos []*search.Result // chartRepos contains all repositories which serve the searched chart
 
 	// repo tracks all chart repositories by its name, as key.
 	repo := make(map[string]trackedRepos, len(r))
@@ -393,15 +399,33 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 			continue
 		}
 
-		// skip if chart is deprecated and 'ignore-deprecations' is enabled
-		if ignoreDeprecations && result.Chart.Deprecated {
-			if v, ok := repo[result.Name]; ok {
+		// store information that chart is deprecated
+		if result.Chart.Deprecated {
+			v, ok := repo[result.Name]
+			if ok {
 				// mark the tracked chart as deprecated so we can skip it later.
 				v.deprecated = true
 				repo[result.Name] = v
+			} else {
+				// first time we track this repository
+				chartRepos = append(chartRepos, result)
+
+				resultVersion, err := semver.NewVersion(result.Chart.Version)
+				if err != nil {
+					return ret, false, err
+				}
+
+				repo[result.Name] = trackedRepos{
+					version:    resultVersion,
+					result:     &(r[i]), // store the address of the element, so we can change it later
+					deprecated: true,
+				}
 			}
 
-			continue
+			// skip if chart is deprecated and 'ignore-deprecations' is enabled
+			if ignoreDeprecations {
+				continue
+			}
 		}
 
 		// check if Version is newer than the actual one
@@ -470,11 +494,12 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 		// NOTE: there is a special case when multiple repositories do serve this chart
 		//       but one or more marked the chart as "deprecated", i.e. as done with all charts in the "stable" repository.
 		repos := []outdatedElement{}
+		crI := -1 // crI is the index in chartRepos
 
-		for _, c := range chartRepos {
+		for i, c := range chartRepos {
 			if ignoreDeprecations {
 				// the repo is tracked if not then we have BUG.
-				if v := repo[c.Name]; v.deprecated {
+				if v := repo[c.Name]; v.deprecated && ignoreDeprecations {
 					// chart has been marked as deprecated and user
 					// don't wants to see deprecated charts => skip it
 					continue
@@ -490,11 +515,24 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 				Updated:      c.Chart.Created,
 				Deprecated:   c.Chart.Deprecated,
 			})
+
+			crI = i
 		}
 
 		// as described in the first NOTE: it could be that multiple repos serve the chart but they marked it as deprecated.
 		// In this case we may have only ONE repository left serving the chart.
 		if len(repos) == 1 {
+			debug("Only one repo does serve a non-deprecated chart for '%s'.", release.Chart.Name())
+
+			// override the chart at index #0
+			chartRepos[0] = chartRepos[crI]
+
+			goto oneRepo
+		}
+
+		// special case: no repo has been found with the matching inputs
+		if len(repos) == 0 {
+			foundNewer = false
 			goto oneRepo
 		}
 
@@ -518,21 +556,26 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 	}
 
 oneRepo:
-	if foundNewer {
-		ret.Type = CHART
-		ret.chart = chartRepos[0]
-
-		// if @duplicate contains more than 1 entry then we have to check if a repository contains a deprecated Chart.
-		if len(chartRepos) > 1 {
-			checkDeprecation(chartRepos)
-		}
-
-		// TODO(l0nax): Correct me
-		return ret, true, nil
+	// directly return if we haven't found a newer chart.
+	if !foundNewer {
+		debug("No newer Chart was found for '%s'", release.Chart.Name())
+		return ret, false, nil
 	}
 
-	debug("No newer Chart was found for '%s'", release.Chart.Name())
-	return ret, false, nil
+	// check if the chart is deprecated.
+	v := repo[chartRepos[0].Name]
+
+	if v.deprecated && ignoreDeprecations {
+		warn("The newest version for the chart '%s' is marked as "+
+			deprecatedStrColor+"DEPRECATED"+ansi.Reset+"!", chartRepos[0].Name)
+		return ret, false, nil
+	}
+
+	ret.Type = CHART
+	ret.chart = chartRepos[0]
+
+	// TODO(l0nax): Correct me
+	return ret, true, nil
 }
 
 // searchSrcRepo searches in rs the repository from where the release chart has been downloaded.
@@ -542,7 +585,7 @@ func searchSrcRepo(rd *repoDuplicate) {
 	// NOTE: r.Chart does contain the FULL chart path, i.e. <REPOSITORY>/<CHART>
 
 	for i, r := range rd.Repos {
-		rs, err := index.Search(r.Name, 50, false)
+		rs, err := index.Search(r.Chart, 50, false)
 		if err != nil {
 			log.Fatalf("An error occurred while searching for the source repository: %#+v\n", err)
 		}
@@ -554,8 +597,8 @@ func searchSrcRepo(rd *repoDuplicate) {
 		}
 
 		// check if this repo does have the EXACT same Chart-Version <=> App-Version
-		app, ok := v[r.LatestVer]
-		if ok && app == r.AppVer {
+		app, ok := v[rd.InstalledChartVersion]
+		if ok && app == rd.InstalledAppVersion {
 			// we may be have found the repository which has been used to install this chart
 			rd.IndexSrcRepo = i
 
@@ -575,7 +618,7 @@ func getAllVersions(r *outdatedElement, rs []*search.Result) (map[string]string,
 	ver := make(map[string]string, 50)
 
 	for _, res := range rs {
-		if res.Chart.Name != r.Name {
+		if res.Name != r.Chart {
 			continue
 		}
 
