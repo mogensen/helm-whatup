@@ -47,6 +47,7 @@ import (
 // repoHighlightColor is the highlighting color for the repository, in the "multiple-repositories-view", from which the release
 // has been installed from.
 var repoHighlightColor = ansi.Green
+var deprecatedStrColor = ansi.LightRed
 
 var settings = cli.New()
 var index *search.Index
@@ -565,7 +566,8 @@ oneRepo:
 	v := repo[chartRepos[0].Name]
 
 	if v.deprecated && ignoreDeprecations {
-		warn("The newest version for the chart '%s' is marked as DEPRECATED!", chartRepos[0].Name)
+		warn("The newest version for the chart '%s' is marked as "+
+			deprecatedStrColor+"DEPRECATED"+ansi.Reset+"!", chartRepos[0].Name)
 		return ret, false, nil
 	}
 
