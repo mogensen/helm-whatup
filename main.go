@@ -108,6 +108,7 @@ var (
 	enableBetaFeatures bool // enableBetaFeatures describes if all beta features should be enabled by default.
 	// colorizeInstalledChart indicates that the repository should be colorized from where the chart has been installed.
 	colorizeInstalledChart bool
+	onlySrcUpdates         bool // onlySrcUpdates describes if the user wants to see only updates from its source repository.
 )
 
 // printWarnings prints Warning if specific flags have been set.
@@ -190,6 +191,8 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	flags.IntVarP(&client.Limit, "max", "m", 256, "maximum number of releases to fetch")
 	flags.IntVar(&client.Offset, "offset", 0, "next release name in the list, used to offset from start value")
 	flags.BoolVar(&showVersion, "version", false, "show version information")
+	flags.BoolVar(&onlySrcUpdates, "only-source-updates", true,
+		"only show updates of a chart repository where the Chart-Version and App-Version do match.")
 
 	bindOutputFlag(cmd, &outfmt)
 
@@ -286,7 +289,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 	// we initialize the Struct with default Options but the 'devel' option can be set by the User, all the other ones are not
 	// relevant.
 	searchRepo := searchRepoOptions{
-		versions:     true,
+		versions:     true, // index all versions
 		regexp:       false,
 		devel:        devel,
 		maxColWidth:  50,
@@ -303,10 +306,29 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		os.Exit(1)
 	}
 
-	// get all locally indexed charts
-	results := index.All()
+	var results []*search.Result
+
+	// only index all repositories, if the source repository shall not be respected
+	if !onlySrcUpdates {
+		// get all locally indexed charts
+		results = index.All()
+	}
 
 	for _, r := range releases {
+		if onlySrcUpdates {
+			results = index.SearchLiteral(r.Chart.Name(), 50)
+
+			// find the source repository
+			srcRepo := getSrcRepo(results, r.Chart.Name(), r.Chart.Metadata.Version, r.Chart.AppVersion())
+			if srcRepo == "" {
+				warn("The source repository could not be determined for '%s'", r.Name)
+				continue
+			}
+
+			// only index versions of the source repository
+			results = index.SearchLiteral(srcRepo+"/"+r.Chart.Name(), 50)
+		}
+
 		// search if it exists a newer Chart in the Chart-Repository
 		repoResult, dep, err := searchChart(results, r, devel)
 		if err != nil {
@@ -576,6 +598,36 @@ oneRepo:
 
 	// TODO(l0nax): Correct me
 	return ret, true, nil
+}
+
+// getSrcRepo works like searchSrcRepo but it uses a search result i as search point.
+//
+// The data in i MUST be filtered before.
+// Example:
+//	i := index.SearchRegexp(".*/" + release.Chart.Name() + "$", 50)
+//
+// Where release.Chart.Name() is only the chart name WITHOUT the repositories name.
+//
+// The name of the source repo will be returned.
+// The string will be empty if no source repo was found.
+func getSrcRepo(i []*search.Result, chartName, chartVer, appVer string) string {
+	for _, r := range i {
+		if !strings.HasSuffix(r.Name, chartName) {
+			// this could be if, i.e., there exists a HA version.
+			// Installed chart named: postres
+			// Charts returned from index search:
+			//	- postgres
+			//  - postgres-ha
+			continue
+		}
+
+		// check Chart and App version
+		if r.Chart.Version == chartVer && r.Chart.AppVersion == appVer {
+			return strings.Split(r.Name, "/")[0]
+		}
+	}
+
+	return ""
 }
 
 // searchSrcRepo searches in rs the repository from where the release chart has been downloaded.
