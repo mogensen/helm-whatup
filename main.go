@@ -529,6 +529,12 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 			goto oneRepo
 		}
 
+		// special case: no repo has been found with the matching inputs
+		if len(repos) == 0 {
+			foundNewer = false
+			goto oneRepo
+		}
+
 		debug("%d repositories do serve the '%s' chart. Switching to 'REPOS' type.", len(chartRepos), release.Chart.Name())
 
 		ret.Type = REPOS
