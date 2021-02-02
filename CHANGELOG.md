@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 
+## 0.5.4 (2021-02-02)
+
+### Added (1 change)
+- Add `--only-source-updates` flag, to show only updates from source repository
+
+
 ## 0.5.3 (2021-02-02)
 
 ### Other (1 change)
