@@ -421,15 +421,27 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 			continue
 		}
 
+		// check if Version is newer than the actual one
+		version, err := semver.NewVersion(result.Chart.Metadata.Version)
+		if err != nil {
+			return ret, false, err
+		}
+
 		// store information that chart is deprecated
 		if result.Chart.Deprecated {
+			debug("Chart '%s' with version '%s' has been marked as DEPRECATED", result.Name, result.Chart.Metadata.Version)
+
 			v, ok := repo[result.Name]
 			if ok {
-				// mark the tracked chart as deprecated so we can skip it later.
-				v.deprecated = true
-				repo[result.Name] = v
+				// only change the deprecated state if the current Chart version is greater than the tracked one
+				if version.GreaterThan(v.version) {
+					// mark the tracked chart as deprecated so we can skip it later.
+					v.deprecated = true
+					repo[result.Name] = v
+				}
 			} else {
 				// first time we track this repository
+				debug("Tracking DEPRECATED chart '%s@%s' the first time [chartRepos]", result.Name, result.Chart.Version)
 				chartRepos = append(chartRepos, result)
 
 				resultVersion, err := semver.NewVersion(result.Chart.Version)
@@ -448,12 +460,6 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 			if ignoreDeprecations {
 				continue
 			}
-		}
-
-		// check if Version is newer than the actual one
-		version, err := semver.NewVersion(result.Chart.Metadata.Version)
-		if err != nil {
-			return ret, false, err
 		}
 
 		constrain, err := semver.NewConstraint(constrainStr)
@@ -488,8 +494,9 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 				// change the tracked repository (*result) in the `chartRepos` array
 				// ==> track only the newest version
 				**ver.result = *result
-
 				ver.version = version
+				ver.deprecated = result.Chart.Deprecated
+
 				repo[result.Name] = ver
 			}
 		}
@@ -521,7 +528,10 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 		for i, c := range chartRepos {
 			if ignoreDeprecations {
 				// the repo is tracked if not then we have BUG.
-				if v := repo[c.Name]; v.deprecated && ignoreDeprecations {
+				if v := repo[c.Name]; v.deprecated {
+					debug("Chart '%s@%s' is (internally) tracked as DEPRECATED and will be ignored for the future repos processing",
+						c.Name, c.Chart.Metadata.Version)
+
 					// chart has been marked as deprecated and user
 					// don't wants to see deprecated charts => skip it
 					continue
@@ -550,11 +560,10 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 			chartRepos[0] = chartRepos[crI]
 
 			goto oneRepo
-		}
-
-		// special case: no repo has been found with the matching inputs
-		if len(repos) == 0 {
+		} else if len(repos) == 0 { // special case: no repo has been found with the matching inputs
+			debug("All found repositories serving '%s' have been filtered out. [foundNewer = false]", release.Chart.Name())
 			foundNewer = false
+
 			goto oneRepo
 		}
 

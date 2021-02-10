@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 
+## 0.6.0 (2021-02-10)
+
+### Other (1 change)
+- Mark charts as deprecated if it's the latest version which has been marked deprecated.
+
+
 ## 0.5.4 (2021-02-02)
 
 ### Added (1 change)
