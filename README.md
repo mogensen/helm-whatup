@@ -9,7 +9,8 @@
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3007/badge)](https://bestpractices.coreinfrastructure.org/projects/3007)
 
 [![Latest Release](https://github-basic-badges.herokuapp.com/release/fabmation-gmbh/helm-whatup.svg)]()
-[![Latest Release Downloads](https://github-basic-badges.herokuapp.com/downloads/fabmation-gmbh/helm-whatup/latest/total.svg)]()
+[![Latest Release Downloads](https://img.shields.io/github/downloads/fabmation-gmbh/helm-whatup/latest/total?style=flat-square)]()
+[![All Downloads](https://img.shields.io/github/downloads/fabmation-gmbh/helm-whatup/total?style=flat-square)]()
 
 This Repo is a fork of [bacongobbler/helm-whatup][], because the original project is no longer actively further developed.
 
