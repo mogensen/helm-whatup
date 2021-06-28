@@ -166,7 +166,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 				return err
 			}
 
-			return outfmt.Write(out, newOutdatedListWriter(releases, cfg, out, devel))
+			return outfmt.Write(out, newOutdatedListWriter(releases, cfg, out, devel, client.All))
 		},
 	}
 
@@ -280,7 +280,7 @@ type searchResult struct {
 	repos repoDuplicate  // repos will contain information if @Type is @REPOS
 }
 
-func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuration, out io.Writer, devel bool) *outdatedListWriter {
+func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuration, out io.Writer, devel, all bool) *outdatedListWriter {
 	var err error
 
 	outdated := make([]outdatedElement, 0, len(releases))
@@ -330,7 +330,7 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		}
 
 		// search if it exists a newer Chart in the Chart-Repository
-		repoResult, dep, err := searchChart(results, r, devel)
+		repoResult, dep, err := searchChart(results, r, devel, all)
 		if err != nil {
 			if !ignoreNoRepo {
 				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
@@ -387,7 +387,7 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 // It will return a struct with all search information.
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
-func searchChart(r []*search.Result, release *release.Release, devel bool) (searchResult, bool, error) {
+func searchChart(r []*search.Result, release *release.Release, devel, all bool) (searchResult, bool, error) {
 	ret := searchResult{}
 
 	// trackedRepos keeps information about a repository we already tracked.
@@ -409,6 +409,9 @@ func searchChart(r []*search.Result, release *release.Release, devel bool) (sear
 
 	// prepare the constrain string so we do not have the re-calculate it every time
 	constrainStr := "> " + release.Chart.Metadata.Version
+	if all {
+		constrainStr = ">= " + release.Chart.Metadata.Version
+	}
 	if devel {
 		constrainStr += "-0" + " != " + release.Chart.Metadata.Version
 	}
